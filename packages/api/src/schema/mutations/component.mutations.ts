@@ -4,54 +4,37 @@
  * Реализует операции для прохождения различных типов компонентов:
  * статей, заданий, квизов и других типов контента.
  * 
+ * Ключевая особенность: все взаимодействия происходят со СНАПШОТАМИ компонентов,
+ * а не с оригинальными компонентами!
+ * 
  * Мутации:
- * - interactWithComponent: Основное взаимодействие с компонентом
- * - submitAnswer: Отправка ответа на задание/квиз
- * - updateProgress: Обновление прогресса прохождения
- * - markComponentComplete: Принудительное завершение компонента
- * - resetComponent: Сброс прогресса компонента
+ * - interactWithComponent: Универсальное взаимодействие с компонентом
+ * - submitTaskAnswer: Отправка ответа на задание
+ * - submitQuizAnswer: Отправка ответа на квиз
+ * - updateReadingProgress: Обновление прогресса чтения статьи
+ * - updateVideoProgress: Обновление прогресса просмотра видео
+ * - resetComponentProgress: Сброс прогресса компонента
  */
 
 import { builder } from '../index'
-import { InteractWithComponentUseCase, ComponentInteractionInput } from '../../core/usecases/component/InteractWithComponentUseCase'
-import { ComponentService } from '../../core/services/component/ComponentService'
 import { ProgressService } from '../../core/services/progress/ProgressService'
-import { ComponentRepository } from '../../core/repositories/ComponentRepository'
-import { ProgressRepository } from '../../core/repositories/ProgressRepository'
-import { handleResolverError, requireAuth } from '../index'
 import { z } from 'zod'
 
-/**
- * Валидационные схемы для компонентов
- */
+// ===== ВАЛИДАЦИОННЫЕ СХЕМЫ =====
+
 const InteractWithComponentInputSchema = z.object({
   assignmentId: z.string().min(1, 'ID назначения обязателен'),
-  componentId: z.string().min(1, 'ID компонента обязателен'),
-  interactionType: z.enum(['VIEW', 'START', 'SUBMIT', 'COMPLETE'], {
-    errorMap: () => ({ message: 'Некорректный тип взаимодействия' })
+  componentSnapshotId: z.string().min(1, 'ID снапшота компонента обязателен'),
+  action: z.enum(['START_READING', 'FINISH_READING', 'SUBMIT_ANSWER', 'SUBMIT_QUIZ_ANSWER', 'START_VIDEO', 'UPDATE_VIDEO_PROGRESS', 'FINISH_VIDEO'], {
+    errorMap: () => ({ message: 'Некорректное действие' })
   }),
-  data: z.record(z.any()).optional() // Дополнительные данные для конкретного типа компонента
+  data: z.record(z.any()).optional()
 })
 
-const SubmitAnswerInputSchema = z.object({
-  assignmentId: z.string().min(1),
-  componentId: z.string().min(1),
-  answerData: z.object({
-    // Для квизов
-    selectedOptionIds: z.array(z.string()).optional(),
-    // Для заданий с кодовым словом
-    codeWord: z.string().optional(),
-    // Для текстовых ответов
-    textAnswer: z.string().optional(),
-    // Время, потраченное на ответ
-    timeSpent: z.number().min(0).optional(),
-    // Дополнительные файлы или данные
-    attachments: z.array(z.string()).optional()
-  })
-})
+// ===== ВХОДНЫЕ ТИПЫ =====
 
 /**
- * Входные типы для взаимодействия с компонентами
+ * Основной входной тип для взаимодействия с компонентом
  */
 builder.inputType('InteractWithComponentInput', {
   description: 'Данные для взаимодействия с компонентом',
@@ -60,378 +43,498 @@ builder.inputType('InteractWithComponentInput', {
       required: true,
       description: 'ID назначения потока' 
     }),
-    componentId: t.id({ 
+    componentSnapshotId: t.id({ 
       required: true,
-      description: 'ID компонента для взаимодействия' 
+      description: 'ID снапшота компонента (НЕ оригинального компонента!)' 
     }),
-    interactionType: t.field({
-      type: 'ComponentInteractionType',
+    action: t.field({
+      type: 'ComponentAction',
       required: true,
-      description: 'Тип взаимодействия с компонентом'
+      description: 'Тип действия с компонентом'
     }),
-    data: t.field({
-      type: 'JSON',
-      required: false,
-      description: 'Дополнительные данные для специфичного типа компонента'
-    })
-  })
-})
-
-builder.inputType('SubmitAnswerInput', {
-  description: 'Данные для отправки ответа на компонент',
-  fields: (t) => ({
-    assignmentId: t.id({ required: true }),
-    componentId: t.id({ required: true }),
+    
+    // Типизированные данные для разных действий
     answerData: t.field({
-      type: 'AnswerData',
+      type: 'TaskAnswerInput',
+      required: false,
+      description: 'Данные ответа на задание'
+    }),
+    quizAnswerData: t.field({
+      type: 'QuizAnswerInput',
+      required: false,
+      description: 'Данные ответа на квиз'
+    }),
+    readingData: t.field({
+      type: 'ReadingProgressInput',
+      required: false,
+      description: 'Данные прогресса чтения'
+    }),
+    videoData: t.field({
+      type: 'VideoProgressInput',
+      required: false,
+      description: 'Данные прогресса видео'
+    }),
+    
+    // Метаданные
+    timeSpent: t.int({
+      required: false,
+      description: 'Время, потраченное на действие (в секундах)'
+    }),
+    platform: t.string({
+      required: false,
+      description: 'Платформа (web, mobile, etc.)'
+    })
+  })
+})
+
+/**
+ * Данные ответа на задание
+ */
+builder.inputType('TaskAnswerInput', {
+  description: 'Данные для ответа на задание',
+  fields: (t) => ({
+    answer: t.string({
       required: true,
-      description: 'Данные ответа пользователя'
-    })
-  })
-})
-
-builder.inputType('AnswerData', {
-  description: 'Структура данных ответа',
-  fields: (t) => ({
-    selectedOptionIds: t.idList({ 
-      required: false,
-      description: 'Выбранные опции (для квизов)'
+      description: 'Ответ пользователя'
     }),
-    codeWord: t.string({ 
+    hintUsed: t.boolean({
       required: false,
-      description: 'Кодовое слово (для заданий)'
-    }),
-    textAnswer: t.string({ 
-      required: false,
-      description: 'Текстовый ответ'
-    }),
-    timeSpent: t.int({ 
-      required: false,
-      description: 'Время в секундах, потраченное на компонент'
-    }),
-    attachments: t.stringList({ 
-      required: false,
-      description: 'Файлы, прикрепленные к ответу'
+      description: 'Использовалась ли подсказка'
     })
   })
 })
 
 /**
- * Перечисления для типов взаимодействия
+ * Данные ответа на квиз
  */
-builder.enumType('ComponentInteractionType', {
-  description: 'Типы взаимодействия с компонентом',
-  values: {
-    VIEW: { 
-      value: 'VIEW',
-      description: 'Просмотр компонента' 
-    },
-    START: { 
-      value: 'START',
-      description: 'Начало взаимодействия' 
-    },
-    SUBMIT: { 
-      value: 'SUBMIT',
-      description: 'Отправка ответа' 
-    },
-    COMPLETE: { 
-      value: 'COMPLETE',
-      description: 'Завершение компонента' 
-    }
-  }
+builder.inputType('QuizAnswerInput', {
+  description: 'Данные для ответа на квиз',
+  fields: (t) => ({
+    questionId: t.id({
+      required: true,
+      description: 'ID вопроса'
+    }),
+    optionIds: t.idList({
+      required: true,
+      description: 'ID выбранных вариантов ответа'
+    }),
+    timeSpentOnQuestion: t.int({
+      required: false,
+      description: 'Время, потраченное на вопрос (в секундах)'
+    })
+  })
 })
 
 /**
- * Результирующие типы
+ * Данные прогресса чтения
  */
-builder.objectType('ComponentInteractionResult', {
-  description: 'Результат взаимодействия с компонентом',
+builder.inputType('ReadingProgressInput', {
+  description: 'Данные прогресса чтения статьи',
   fields: (t) => ({
-    success: t.boolean({
-      description: 'Успешность операции'
+    scrollProgress: t.float({
+      required: true,
+      description: 'Прогресс прокрутки (0.0-1.0)'
     }),
-    componentProgress: t.field({
-      type: 'ComponentProgress',
-      description: 'Обновленный прогресс компонента'
+    timeSpent: t.int({
+      required: true,
+      description: 'Время чтения в данной сессии (в секундах)'
     }),
-    nextAction: t.field({
-      type: 'NextActionSuggestion',
-      nullable: true,
-      description: 'Предложение следующего действия'
-    }),
-    errors: t.stringList({
-      description: 'Список ошибок, если есть'
+    reachedEnd: t.boolean({
+      required: false,
+      description: 'Достигнут ли конец статьи'
     })
   })
-})
-
-builder.objectType('SubmitAnswerResult', {
-  description: 'Результат отправки ответа',
-  fields: (t) => ({
-    success: t.boolean({
-      description: 'Правильность ответа'
-    }),
-    score: t.int({
-      nullable: true,
-      description: 'Набранные баллы (для квизов)'
-    }),
-    feedback: t.string({
-      nullable: true,
-      description: 'Обратная связь по ответу'
-    }),
-    isCompleted: t.boolean({
-      description: 'Завершен ли компонент после этого ответа'
-    }),
-    attemptsLeft: t.int({
-      nullable: true,
-      description: 'Оставшееся количество попыток'
-    }),
-    componentProgress: t.field({
-      type: 'ComponentProgress',
-      description: 'Обновленный прогресс компонента'
-    }),
-    flowProgress: t.field({
-      type: 'FlowProgress',
-      nullable: true,
-      description: 'Обновленный прогресс всего потока'
-    })
-  })
-})
-
-builder.objectType('NextActionSuggestion', {
-  description: 'Предложение следующего действия пользователю',
-  fields: (t) => ({
-    type: t.field({
-      type: 'NextActionType',
-      description: 'Тип предлагаемого действия'
-    }),
-    message: t.string({
-      description: 'Сообщение пользователю'
-    }),
-    targetComponentId: t.id({
-      nullable: true,
-      description: 'ID следующего компонента, если применимо'
-    })
-  })
-})
-
-builder.enumType('NextActionType', {
-  description: 'Типы предлагаемых действий',
-  values: {
-    CONTINUE_TO_NEXT: { value: 'CONTINUE_TO_NEXT' },
-    RETRY_COMPONENT: { value: 'RETRY_COMPONENT' },
-    REVIEW_STEP: { value: 'REVIEW_STEP' },
-    COMPLETE_FLOW: { value: 'COMPLETE_FLOW' },
-    CONTACT_BUDDY: { value: 'CONTACT_BUDDY' }
-  }
 })
 
 /**
- * Мутации для работы с компонентами
+ * Данные прогресса видео
  */
-builder.mutationFields((t) => ({
-  /**
-   * Основное взаимодействие с компонентом
-   */
-  interactWithComponent: t.field({
-    type: 'ComponentInteractionResult',
-    description: 'Взаимодействие с компонентом (просмотр, начало, завершение)',
+builder.inputType('VideoProgressInput', {
+  description: 'Данные прогресса просмотра видео',
+  fields: (t) => ({
+    currentTime: t.int({
+      required: true,
+      description: 'Текущая позиция в видео (в секундах)'
+    }),
+    duration: t.int({
+      required: true,
+      description: 'Общая длительность видео (в секундах)'
+    }),
+    playbackSpeed: t.float({
+      required: false,
+      description: 'Скорость воспроизведения'
+    }),
+    watchedSegments: t.field({
+      type: ['WatchedSegmentInput'],
+      required: false,
+      description: 'Просмотренные сегменты видео'
+    })
+  })
+})
+
+/**
+ * Просмотренный сегмент видео
+ */
+builder.inputType('WatchedSegmentInput', {
+  description: 'Сегмент видео, который был просмотрен',
+  fields: (t) => ({
+    startTime: t.int({
+      required: true,
+      description: 'Начало сегмента (в секундах)'
+    }),
+    endTime: t.int({
+      required: true,
+      description: 'Конец сегмента (в секундах)'
+    })
+  })
+})
+
+/**
+ * Данные для полного ответа на квиз
+ */
+builder.inputType('CompleteQuizInput', {
+  description: 'Данные для завершения квиза',
+  fields: (t) => ({
+    assignmentId: t.id({
+      required: true,
+      description: 'ID назначения'
+    }),
+    componentSnapshotId: t.id({
+      required: true,
+      description: 'ID снапшота компонента-квиза'
+    }),
+    answers: t.field({
+      type: 'JSON',
+      required: true,
+      description: 'Ответы на все вопросы (questionId -> optionIds[])'
+    }),
+    timeSpent: t.int({
+      required: true,
+      description: 'Время прохождения квиза (в секундах)'
+    }),
+    startedAt: t.field({
+      type: 'DateTime',
+      required: true,
+      description: 'Время начала прохождения квиза'
+    })
+  })
+})
+
+// ===== ОСНОВНЫЕ МУТАЦИИ =====
+
+/**
+ * Универсальная мутация для взаимодействия с компонентом
+ */
+builder.mutationField('interactWithComponent', (t) =>
+  t.field({
+    type: 'ProgressUpdateResult',
+    description: 'Взаимодействие с компонентом (статья, задание, квиз, видео)',
     args: {
       input: t.arg({ 
         type: 'InteractWithComponentInput', 
-        required: true 
+        required: true,
+        description: 'Данные взаимодействия с компонентом'
       })
     },
     resolve: async (_, { input }, context) => {
       try {
-        const currentUser = requireAuth(context)
-        
-        // Валидация входных данных
-        const validatedInput = InteractWithComponentInputSchema.parse(input)
-        
-        // Создаем экземпляры сервисов
-        const componentRepository = new ComponentRepository(context.prisma)
-        const progressRepository = new ProgressRepository(context.prisma)
-        const componentService = new ComponentService(componentRepository, progressRepository)
-        
-        // Создаем use case
-        const interactWithComponentUseCase = new InteractWithComponentUseCase(
-          componentService,
-          progressRepository
-        )
-        
-        // Выполняем взаимодействие
-        const result = await interactWithComponentUseCase.execute({
-          userId: currentUser.id,
-          assignmentId: validatedInput.assignmentId,
-          componentId: validatedInput.componentId,
-          interactionType: validatedInput.interactionType,
-          data: validatedInput.data
+        // Проверяем авторизацию
+        const currentUser = context.user
+        if (!currentUser) {
+          return {
+            success: false,
+            message: 'Необходима авторизация',
+            errors: ['Пользователь не авторизован']
+          }
+        }
+
+        // Валидируем входные данные
+        const validatedInput = InteractWithComponentInputSchema.parse({
+          assignmentId: input.assignmentId,
+          componentSnapshotId: input.componentSnapshotId,
+          action: input.action,
+          data: {
+            answerData: input.answerData,
+            quizAnswerData: input.quizAnswerData,
+            readingData: input.readingData,
+            videoData: input.videoData,
+            timeSpent: input.timeSpent,
+            platform: input.platform
+          }
         })
-        
+
+        // Получаем сервис прогресса
+        const progressService = context.services.progressService as ProgressService
+
+        // Формируем данные для обновления прогресса
+        const updateData = {
+          action: this.mapActionToProgressAction(input.action),
+          data: this.prepareActionData(input),
+          metadata: {
+            platform: input.platform,
+            ipAddress: context.req?.ip
+          }
+        }
+
+        // Обновляем прогресс
+        const result = await progressService.updateComponentProgress(
+          currentUser.id,
+          input.assignmentId,
+          input.componentSnapshotId,
+          updateData
+        )
+
+        // Формируем ответ
         return {
           success: true,
-          componentProgress: result.componentProgress,
-          nextAction: result.nextAction,
+          message: this.getSuccessMessage(input.action, result.progress.status),
+          componentProgress: result.progress,
+          unlockResult: result.unlockResult,
+          nextActions: this.generateNextActions(result.progress, result.unlockResult),
           errors: []
         }
-        
-      } catch (error) {
-        console.error('❌ Ошибка взаимодействия с компонентом:', error)
-        return handleResolverError(error, 'Не удалось выполнить взаимодействие с компонентом')
-      }
-    }
-  }),
 
-  /**
-   * Отправка ответа на компонент
-   */
-  submitAnswer: t.field({
-    type: 'SubmitAnswerResult',
-    description: 'Отправка ответа на задание или квиз',
+      } catch (error) {
+        console.error('Ошибка взаимодействия с компонентом:', error)
+        
+        return {
+          success: false,
+          message: 'Произошла ошибка при обработке действия',
+          componentProgress: null,
+          unlockResult: null,
+          nextActions: [],
+          errors: [error.message || 'Неизвестная ошибка']
+        }
+      }
+    },
+    
+    // Вспомогательные методы
+    mapActionToProgressAction(action: string): string {
+      const actionMap = {
+        'START_READING': 'START',
+        'FINISH_READING': 'COMPLETE',
+        'SUBMIT_ANSWER': 'SUBMIT_ANSWER',
+        'SUBMIT_QUIZ_ANSWER': 'SUBMIT_ANSWER',
+        'START_VIDEO': 'START',
+        'UPDATE_VIDEO_PROGRESS': 'UPDATE_PROGRESS',
+        'FINISH_VIDEO': 'COMPLETE'
+      }
+      return actionMap[action] || 'UPDATE_PROGRESS'
+    },
+    
+    prepareActionData(input: any): Record<string, any> {
+      const data: Record<string, any> = {}
+      
+      if (input.answerData) {
+        data.answer = input.answerData.answer
+        data.hintUsed = input.answerData.hintUsed
+      }
+      
+      if (input.quizAnswerData) {
+        data.answers = {
+          [input.quizAnswerData.questionId]: input.quizAnswerData.optionIds
+        }
+        data.timeSpent = input.quizAnswerData.timeSpentOnQuestion
+      }
+      
+      if (input.readingData) {
+        data.scrollProgress = input.readingData.scrollProgress
+        data.timeSpent = input.readingData.timeSpent
+        data.reachedEnd = input.readingData.reachedEnd
+      }
+      
+      if (input.videoData) {
+        data.currentTime = input.videoData.currentTime
+        data.duration = input.videoData.duration
+        data.playbackSpeed = input.videoData.playbackSpeed
+        data.watchedSegments = input.videoData.watchedSegments
+      }
+      
+      if (input.timeSpent) {
+        data.timeSpent = input.timeSpent
+      }
+      
+      return data
+    },
+    
+    getSuccessMessage(action: string, status: string): string {
+      switch (action) {
+        case 'START_READING':
+          return 'Чтение статьи начато'
+        case 'FINISH_READING':
+          return 'Статья прочитана! Отлично!'
+        case 'SUBMIT_ANSWER':
+          return status === 'COMPLETED' ? 'Правильно! Задание выполнено!' : 'Ответ принят. Попробуйте еще раз.'
+        case 'SUBMIT_QUIZ_ANSWER':
+          return 'Ответ на вопрос сохранен'
+        case 'START_VIDEO':
+          return 'Просмотр видео начат'
+        case 'UPDATE_VIDEO_PROGRESS':
+          return 'Прогресс видео обновлен'
+        case 'FINISH_VIDEO':
+          return 'Видео просмотрено полностью!'
+        default:
+          return 'Прогресс обновлен'
+      }
+    },
+    
+    generateNextActions(progress: any, unlockResult: any): string[] {
+      const actions: string[] = []
+      
+      if (progress.status === 'COMPLETED') {
+        actions.push('COMPONENT_COMPLETED')
+        
+        if (unlockResult.hasNewUnlocks) {
+          actions.push('NEW_CONTENT_UNLOCKED')
+        }
+      } else if (progress.status === 'IN_PROGRESS') {
+        actions.push('CONTINUE_COMPONENT')
+      }
+      
+      return actions
+    }
+  })
+)
+
+/**
+ * Завершение квиза с полными ответами
+ */
+builder.mutationField('completeQuiz', (t) =>
+  t.field({
+    type: 'ProgressUpdateResult',
+    description: 'Завершение прохождения квиза с полными ответами',
     args: {
       input: t.arg({ 
-        type: 'SubmitAnswerInput', 
+        type: 'CompleteQuizInput', 
         required: true 
       })
     },
     resolve: async (_, { input }, context) => {
       try {
-        const currentUser = requireAuth(context)
-        
-        // Валидация входных данных
-        const validatedInput = SubmitAnswerInputSchema.parse(input)
-        
-        // Создаем экземпляры сервисов
-        const componentRepository = new ComponentRepository(context.prisma)
-        const progressRepository = new ProgressRepository(context.prisma)
-        const componentService = new ComponentService(componentRepository, progressRepository)
-        const progressService = new ProgressService(progressRepository, context.eventBus)
-        
-        // Обрабатываем отправку ответа
-        const result = await componentService.submitAnswer({
-          userId: currentUser.id,
-          assignmentId: validatedInput.assignmentId,
-          componentId: validatedInput.componentId,
-          answerData: validatedInput.answerData
-        })
-        
-        // Обновляем общий прогресс потока
-        const flowProgress = await progressService.updateFlowProgress(
-          validatedInput.assignmentId,
-          currentUser.id
-        )
-        
-        return {
-          success: result.isCorrect,
-          score: result.score,
-          feedback: result.feedback,
-          isCompleted: result.isCompleted,
-          attemptsLeft: result.attemptsLeft,
-          componentProgress: result.componentProgress,
-          flowProgress: flowProgress
+        const currentUser = context.user
+        if (!currentUser) {
+          return {
+            success: false,
+            message: 'Необходима авторизация',
+            errors: ['Пользователь не авторизован']
+          }
         }
-        
-      } catch (error) {
-        console.error('❌ Ошибка отправки ответа:', error)
-        return handleResolverError(error, 'Не удалось отправить ответ')
-      }
-    }
-  }),
 
-  /**
-   * Принудительное завершение компонента (для админов/buddy)
-   */
-  markComponentComplete: t.field({
-    type: 'ComponentInteractionResult',
-    description: 'Принудительное завершение компонента (только для buddy/админов)',
-    authScopes: { buddyOrAdmin: true },
-    args: {
-      assignmentId: t.arg.id({ required: true }),
-      componentId: t.arg.id({ required: true }),
-      userId: t.arg.id({ required: true }),
-      reason: t.arg.string({ required: false })
-    },
-    resolve: async (_, { assignmentId, componentId, userId, reason }, context) => {
-      try {
-        const currentUser = requireAuth(context)
-        
-        // Создаем экземпляры сервисов
-        const componentRepository = new ComponentRepository(context.prisma)
-        const progressRepository = new ProgressRepository(context.prisma)
-        const componentService = new ComponentService(componentRepository, progressRepository)
-        
-        // Принудительно завершаем компонент
-        const result = await componentService.forceCompleteComponent({
-          userId,
-          assignmentId,
-          componentId,
-          completedBy: currentUser.id,
-          reason
-        })
-        
-        return {
-          success: true,
-          componentProgress: result.componentProgress,
-          nextAction: result.nextAction,
-          errors: []
-        }
-        
-      } catch (error) {
-        console.error('❌ Ошибка принудительного завершения:', error)
-        return handleResolverError(error, 'Не удалось завершить компонент')
-      }
-    }
-  }),
+        const progressService = context.services.progressService as ProgressService
 
-  /**
-   * Сброс прогресса компонента
-   */
-  resetComponent: t.field({
-    type: 'ComponentInteractionResult',
-    description: 'Сброс прогресса компонента для повторного прохождения',
-    authScopes: { buddyOrAdmin: true },
-    args: {
-      assignmentId: t.arg.id({ required: true }),
-      componentId: t.arg.id({ required: true }),
-      userId: t.arg.id({ required: true }),
-      reason: t.arg.string({ required: false })
-    },
-    resolve: async (_, { assignmentId, componentId, userId, reason }, context) => {
-      try {
-        const currentUser = requireAuth(context)
-        
-        // Создаем экземпляры сервисов
-        const componentRepository = new ComponentRepository(context.prisma)
-        const progressRepository = new ProgressRepository(context.prisma)
-        const componentService = new ComponentService(componentRepository, progressRepository)
-        
-        // Сбрасываем прогресс компонента
-        const result = await componentService.resetComponent({
-          userId,
-          assignmentId,
-          componentId,
-          resetBy: currentUser.id,
-          reason
-        })
-        
-        return {
-          success: true,
-          componentProgress: result.componentProgress,
-          nextAction: {
-            type: 'RETRY_COMPONENT',
-            message: 'Компонент сброшен, можно начать заново',
-            targetComponentId: componentId
+        const updateData = {
+          action: 'SUBMIT_ANSWER',
+          data: {
+            answers: input.answers,
+            timeSpent: input.timeSpent,
+            startedAt: input.startedAt
           },
+          metadata: {
+            platform: 'web',
+            ipAddress: context.req?.ip
+          }
+        }
+
+        const result = await progressService.updateComponentProgress(
+          currentUser.id,
+          input.assignmentId,
+          input.componentSnapshotId,
+          updateData
+        )
+
+        const quizData = result.progress.progressData as any
+        const passed = quizData?.passed || false
+        const score = quizData?.currentScore || 0
+
+        return {
+          success: true,
+          message: passed 
+            ? `Отлично! Вы прошли квиз с результатом ${score}%`
+            : `Квиз завершен. Результат: ${score}%. Попробуйте еще раз для улучшения результата.`,
+          componentProgress: result.progress,
+          unlockResult: result.unlockResult,
+          nextActions: passed ? ['QUIZ_PASSED', 'CONTINUE_LEARNING'] : ['QUIZ_FAILED', 'RETRY_QUIZ'],
           errors: []
         }
-        
+
       } catch (error) {
-        console.error('❌ Ошибка сброса компонента:', error)
-        return handleResolverError(error, 'Не удалось сбросить компонент')
+        console.error('Ошибка завершения квиза:', error)
+        
+        return {
+          success: false,
+          message: 'Произошла ошибка при обработке результатов квиза',
+          componentProgress: null,
+          unlockResult: null,
+          nextActions: [],
+          errors: [error.message || 'Неизвестная ошибка']
+        }
       }
     }
   })
-}))
+)
 
-export {}
+/**
+ * Сброс прогресса компонента
+ */
+builder.mutationField('resetComponentProgress', (t) =>
+  t.field({
+    type: 'ProgressUpdateResult',
+    description: 'Сброс прогресса компонента для повторного прохождения',
+    args: {
+      assignmentId: t.arg.id({ 
+        required: true,
+        description: 'ID назначения'
+      }),
+      componentSnapshotId: t.arg.id({ 
+        required: true,
+        description: 'ID снапшота компонента'
+      })
+    },
+    resolve: async (_, { assignmentId, componentSnapshotId }, context) => {
+      try {
+        const currentUser = context.user
+        if (!currentUser) {
+          return {
+            success: false,
+            message: 'Необходима авторизация',
+            errors: ['Пользователь не авторизован']
+          }
+        }
+
+        const progressService = context.services.progressService as ProgressService
+
+        const resetProgress = await progressService.resetComponentProgress(
+          currentUser.id,
+          assignmentId,
+          componentSnapshotId
+        )
+
+        return {
+          success: true,
+          message: 'Прогресс компонента сброшен. Вы можете начать заново.',
+          componentProgress: resetProgress,
+          unlockResult: {
+            hasNewUnlocks: false,
+            newUnlockedStepIds: [],
+            newUnlockedComponentIds: [],
+            messages: []
+          },
+          nextActions: ['RESTART_COMPONENT'],
+          errors: []
+        }
+
+      } catch (error) {
+        console.error('Ошибка сброса прогресса:', error)
+        
+        return {
+          success: false,
+          message: 'Не удалось сбросить прогресс компонента',
+          componentProgress: null,
+          unlockResult: null,
+          nextActions: [],
+          errors: [error.message || 'Неизвестная ошибка']
+        }
+      }
+    }
+  })
+)
