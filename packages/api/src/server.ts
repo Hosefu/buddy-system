@@ -1,160 +1,232 @@
 /**
- * Главный сервер BuddyBot API
+ * Основной файл сервера BuddyBot API
  * 
- * Точка входа для всего API сервера. Настраивает и запускает:
- * - Express сервер с middleware
- * - GraphQL API с Apollo Server
- * - Подключение к базе данных
- * - Redis для кеширования и сессий
- * - Telegram webhook
- * - Система мониторинга и логирования
- * - Graceful shutdown
+ * Файл: packages/api/src/server.ts
  * 
- * Архитектура:
- * Express → Middleware → Apollo GraphQL → Services → Repositories → Database
+ * Инициализирует и настраивает:
+ * - Express сервер
+ * - Apollo GraphQL сервер
+ * - Middleware для аутентификации, CORS, логирования
+ * - Подключения к базам данных
+ * - WebSocket для подписок
+ * - Обработку ошибок
  */
 
 import express from 'express'
-import { ApolloServer } from 'apollo-server-express'
 import { createServer } from 'http'
+import { ApolloServer } from '@apollo/server'
+import { expressMiddleware } from '@apollo/server/express4'
+import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer'
+import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default'
 import { WebSocketServer } from 'ws'
 import { useServer } from 'graphql-ws/lib/use/ws'
 import cors from 'cors'
 import helmet from 'helmet'
 import compression from 'compression'
 import rateLimit from 'express-rate-limit'
-import morgan from 'morgan'
+import { PrismaClient } from '@prisma/client'
+import Redis from 'ioredis'
 
-// Конфигурация и схема
-import { config, logConfig, isProduction, isDevelopment } from './config'
-import { schema, createGraphQLContext } from './schema'
-
-// Middleware
-import { AuthMiddleware, jwtService } from './middleware/auth.middleware'
-import { errorHandlerMiddleware, notFoundMiddleware, setupGlobalErrorHandlers, formatGraphQLError } from './middleware/error-handler.middleware'
-
-// Инфраструктура
-import { prisma, checkDatabaseConnection, disconnectPrisma } from '@buddybot/database/client'
-
-// Сервисы и репозитории
-import { UserRepository } from './core/repositories/UserRepository'
-import { FlowRepository } from './core/repositories/FlowRepository'
-import { FlowAssignmentRepository } from './core/repositories/FlowAssignmentRepository'
-import { UserService } from './core/services/user/UserService'
-import { FlowService } from './core/services/flow/FlowService'
-import { FlowAssignmentService } from './core/services/assignment/FlowAssignmentService'
+// Внутренние импорты
+import { schema, createGraphQLContext, formatGraphQLError } from './schema'
+import { authMiddleware } from './middleware/auth.middleware'
+import { config } from './config'
+import type { Context } from './types/context'
 
 /**
- * Класс основного сервера приложения
+ * Основной класс сервера
  */
-class BuddyBotServer {
+export class BuddyBotServer {
   private app: express.Application
   private httpServer: any
-  private apolloServer: ApolloServer | null = null
-  private wsServer: WebSocketServer | null = null
-  
-  // Сервисы
-  private userService: UserService
-  private flowService: FlowService
-  private assignmentService: FlowAssignmentService
-  private authMiddleware: AuthMiddleware
+  private apolloServer: ApolloServer<Context>
+  private prisma: PrismaClient
+  private redis?: Redis
+  private wsServer?: WebSocketServer
 
   constructor() {
     this.app = express()
-    this.httpServer = createServer(this.app)
+    this.prisma = new PrismaClient()
     
-    // Инициализируем репозитории
-    const userRepository = new UserRepository()
-    const flowRepository = new FlowRepository()
-    const assignmentRepository = new FlowAssignmentRepository()
-    
-    // Инициализируем сервисы
-    this.userService = new UserService(userRepository)
-    this.flowService = new FlowService(flowRepository, userRepository)
-    this.assignmentService = new FlowAssignmentService(assignmentRepository, userRepository, flowRepository)
-    
-    // Инициализируем middleware аутентификации
-    this.authMiddleware = new AuthMiddleware(this.userService, jwtService)
+    // Инициализация Redis если настроен
+    if (config.REDIS_URL) {
+      this.redis = new Redis(config.REDIS_URL, {
+        retryDelayOnFailover: 100,
+        maxRetriesPerRequest: 3,
+        lazyConnect: true
+      })
+    }
   }
 
   /**
-   * Настраивает базовые middleware Express
+   * Инициализация и запуск сервера
    */
-  private setupExpressMiddleware(): void {
-    console.log('⚙️ Настройка Express middleware...')
+  async start(): Promise<void> {
+    try {
+      console.log('🚀 Запуск BuddyBot API сервера...')
+
+      // 1. Проверяем подключения к БД
+      await this.checkDatabaseConnection()
+      
+      // 2. Настраиваем middleware
+      this.setupMiddleware()
+      
+      // 3. Настраиваем маршруты
+      this.setupRoutes()
+      
+      // 4. Создаем HTTP сервер
+      this.httpServer = createServer(this.app)
+      
+      // 5. Настраиваем WebSocket для подписок (если включены)
+      if (config.ENABLE_SUBSCRIPTIONS) {
+        await this.setupWebSocket()
+      }
+      
+      // 6. Настраиваем Apollo GraphQL сервер
+      await this.setupApolloServer()
+      
+      // 7. Обработка graceful shutdown
+      this.setupGracefulShutdown()
+      
+      // 8. Запускаем сервер
+      const port = config.PORT || 4000
+      this.httpServer.listen(port, () => {
+        console.log(`✅ BuddyBot API сервер запущен на http://localhost:${port}`)
+        console.log(`📊 GraphQL endpoint: http://localhost:${port}/graphql`)
+        
+        if (config.GRAPHQL_PLAYGROUND) {
+          console.log(`🎮 GraphQL Playground: http://localhost:${port}/graphql`)
+        }
+        
+        if (config.ENABLE_SUBSCRIPTIONS) {
+          console.log(`🔌 WebSocket subscriptions: ws://localhost:${port}/graphql`)
+        }
+        
+        console.log(`🌐 Environment: ${config.NODE_ENV}`)
+        console.log(`📦 API Version: ${config.API_VERSION}`)
+      })
+
+    } catch (error) {
+      console.error('❌ Ошибка запуска сервера:', error)
+      process.exit(1)
+    }
+  }
+
+  /**
+   * Проверка подключения к базе данных
+   */
+  private async checkDatabaseConnection(): Promise<void> {
+    try {
+      console.log('🔗 Проверка подключения к PostgreSQL...')
+      await this.prisma.$connect()
+      console.log('✅ Подключение к PostgreSQL установлено')
+
+      // Проверяем Redis если настроен
+      if (this.redis) {
+        console.log('🔗 Проверка подключения к Redis...')
+        await this.redis.ping()
+        console.log('✅ Подключение к Redis установлено')
+      }
+
+    } catch (error) {
+      console.error('❌ Ошибка подключения к базе данных:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Настройка middleware
+   */
+  private setupMiddleware(): void {
+    console.log('⚙️  Настройка middleware...')
 
     // Безопасность
     this.app.use(helmet({
-      contentSecurityPolicy: isDevelopment ? false : undefined,
+      contentSecurityPolicy: config.NODE_ENV === 'production',
       crossOriginEmbedderPolicy: false
     }))
 
     // CORS
     this.app.use(cors({
-      origin: config.CORS_ORIGIN === '*' ? true : config.CORS_ORIGIN.split(','),
-      credentials: config.CORS_CREDENTIALS,
+      origin: config.CORS_ORIGINS,
+      credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-apollo-operation-name']
     }))
 
-    // Сжатие
+    // Сжатие ответов
     this.app.use(compression())
 
     // Парсинг JSON
     this.app.use(express.json({ limit: '10mb' }))
     this.app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-    // Логирование запросов
-    if (isDevelopment) {
-      this.app.use(morgan('dev'))
-    } else {
-      this.app.use(morgan('combined'))
-    }
-
     // Rate limiting
     const limiter = rateLimit({
       windowMs: config.RATE_LIMIT_WINDOW_MS,
-      max: config.RATE_LIMIT_MAX_REQUESTS,
+      max: config.RATE_LIMIT_MAX,
       message: {
-        error: 'Слишком много запросов, попробуйте позже',
-        code: 'RATE_LIMIT_EXCEEDED'
+        error: 'Слишком много запросов',
+        retryAfter: config.RATE_LIMIT_WINDOW_MS / 1000
       },
       standardHeaders: true,
-      legacyHeaders: false,
-      // Более мягкие ограничения для GraphQL endpoint
-      skip: (req) => req.path === '/graphql' && isProduction === false
+      legacyHeaders: false
+    })
+    this.app.use('/graphql', limiter)
+
+    // Логирование запросов
+    this.app.use((req, res, next) => {
+      const start = Date.now()
+      res.on('finish', () => {
+        const duration = Date.now() - start
+        console.log(`${req.method} ${req.path} ${res.statusCode} - ${duration}ms`)
+      })
+      next()
     })
 
-    this.app.use(limiter)
+    // Аутентификация
+    this.app.use(authMiddleware.authenticate)
 
-    console.log('✅ Express middleware настроены')
+    console.log('✅ Middleware настроены')
   }
 
   /**
-   * Настраивает базовые маршруты
+   * Настройка маршрутов
    */
   private setupRoutes(): void {
-    console.log('🛣️ Настройка маршрутов...')
+    console.log('🛣️  Настройка маршрутов...')
 
-    // Проверка здоровья системы
+    // Health check
     this.app.get('/health', async (req, res) => {
       try {
-        const dbHealthy = await checkDatabaseConnection()
-        
-        const health = {
-          status: dbHealthy ? 'healthy' : 'unhealthy',
-          timestamp: new Date().toISOString(),
-          version: process.env.npm_package_version || '1.0.0',
-          environment: config.NODE_ENV,
-          services: {
-            database: dbHealthy ? 'healthy' : 'unhealthy',
-            // TODO: Добавить проверки других сервисов
-            redis: 'unknown',
-            telegram: 'unknown'
+        // Проверяем подключение к БД
+        await this.prisma.$queryRaw`SELECT 1`
+        const dbHealthy = true
+
+        // Проверяем Redis если настроен
+        let redisHealthy = true
+        if (this.redis) {
+          try {
+            await this.redis.ping()
+          } catch (error) {
+            redisHealthy = false
           }
         }
 
-        res.status(dbHealthy ? 200 : 503).json(health)
+        const health = {
+          status: dbHealthy && redisHealthy ? 'healthy' : 'unhealthy',
+          timestamp: new Date().toISOString(),
+          version: config.API_VERSION,
+          environment: config.NODE_ENV,
+          services: {
+            database: dbHealthy ? 'healthy' : 'unhealthy',
+            redis: this.redis ? (redisHealthy ? 'healthy' : 'unhealthy') : 'not_configured',
+            graphql: 'healthy'
+          },
+          uptime: process.uptime()
+        }
+
+        res.status(dbHealthy && redisHealthy ? 200 : 503).json(health)
       } catch (error) {
         res.status(503).json({
           status: 'unhealthy',
@@ -167,281 +239,284 @@ class BuddyBotServer {
     // Информация о версии API
     this.app.get('/version', (req, res) => {
       res.json({
-        version: process.env.npm_package_version || '1.0.0',
-        apiVersion: config.API_VERSION,
+        version: config.API_VERSION,
         environment: config.NODE_ENV,
-        buildDate: process.env.BUILD_DATE || new Date().toISOString()
+        buildDate: process.env.BUILD_DATE || new Date().toISOString(),
+        nodeVersion: process.version,
+        uptime: process.uptime()
       })
     })
 
-    // Telegram webhook (будет добавлен позже)
-    this.app.post('/webhooks/telegram', (req, res) => {
-      // TODO: Обработка Telegram webhook
-      console.log('📱 Получен Telegram webhook:', req.body)
-      res.status(200).json({ ok: true })
+    // Метрики (базовые)
+    this.app.get('/metrics', (req, res) => {
+      const memUsage = process.memoryUsage()
+      res.json({
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: {
+          rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+          heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+          heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+          external: `${Math.round(memUsage.external / 1024 / 1024)}MB`
+        },
+        cpu: process.cpuUsage()
+      })
+    })
+
+    // Telegram webhook
+    this.app.post('/webhooks/telegram', express.raw({ type: 'application/json' }), (req, res) => {
+      try {
+        console.log('📱 Получен Telegram webhook')
+        // TODO: Обработка Telegram webhook
+        // const update = JSON.parse(req.body.toString())
+        // await telegramBotHandler.handleUpdate(update)
+        
+        res.status(200).json({ ok: true })
+      } catch (error) {
+        console.error('❌ Ошибка обработки Telegram webhook:', error)
+        res.status(500).json({ ok: false, error: 'Internal server error' })
+      }
+    })
+
+    // Fallback для несуществующих маршрутов
+    this.app.use('*', (req, res) => {
+      res.status(404).json({
+        error: 'Not Found',
+        message: `Route ${req.method} ${req.originalUrl} not found`,
+        availableRoutes: [
+          'GET /health',
+          'GET /version', 
+          'GET /metrics',
+          'POST /graphql',
+          'GET /graphql (playground)',
+          'POST /webhooks/telegram'
+        ]
+      })
     })
 
     console.log('✅ Маршруты настроены')
   }
 
   /**
-   * Настраивает Apollo GraphQL сервер
+   * Настройка WebSocket для GraphQL подписок
    */
-  private async setupApolloServer(): Promise<void> {
-    console.log('🚀 Настройка Apollo GraphQL сервера...')
-
-    this.apolloServer = new ApolloServer({
-      schema,
-      context: ({ req, res }) => {
-        // Создаем контекст аутентификации
-        const authContext = this.authMiddleware.createAuthContext(req as any)
-        return createGraphQLContext(authContext)
-      },
-      formatError: formatGraphQLError,
-      
-      // Настройки для разработки
-      introspection: config.GRAPHQL_INTROSPECTION,
-      
-      // Плагины для мониторинга и метрик
-      plugins: [
-        // Логирование запросов
-        {
-          requestDidStart() {
-            return {
-              didResolveOperation({ operationName, variables }) {
-                if (isDevelopment) {
-                  console.log(`📊 GraphQL операция: ${operationName}`)
-                }
-              },
-              didEncounterErrors({ errors, operationName }) {
-                console.error(`❌ GraphQL ошибки в операции ${operationName}:`, errors)
-              }
-            }
-          }
-        },
-        
-        // TODO: Добавить плагины для Apollo Studio, если ключ настроен
-        // ...(config.APOLLO_STUDIO_API_KEY ? [ApolloServerPluginUsageReporting()] : [])
-      ],
-
-      // Настройки безопасности для production
-      ...(isProduction && {
-        introspection: false,
-        debug: false
-      })
-    })
-
-    await this.apolloServer.start()
-    
-    // Применяем middleware Apollo к Express
-    this.apolloServer.applyMiddleware({ 
-      app: this.app, 
-      path: '/graphql',
-      cors: false // CORS уже настроен на уровне Express
-    })
-
-    console.log(`✅ GraphQL сервер запущен на /graphql`)
-  }
-
-  /**
-   * Настраивает WebSocket сервер для подписок
-   */
-  private setupWebSocketServer(): void {
-    console.log('🔌 Настройка WebSocket сервера для подписок...')
+  private async setupWebSocket(): Promise<void> {
+    console.log('🔌 Настройка WebSocket для подписок...')
 
     this.wsServer = new WebSocketServer({
       server: this.httpServer,
       path: '/graphql'
     })
 
-    // Настраиваем GraphQL подписки через WebSocket
-    useServer(
-      {
-        schema,
-        context: async (ctx, msg, args) => {
-          // TODO: Аутентификация для WebSocket соединений
-          // Можно передавать токен через connection params
-          return createGraphQLContext({
-            user: undefined,
-            isAuthenticated: false,
-            hasRole: () => false,
-            hasPermission: () => false,
-            requireAuth: () => { throw new Error('WebSocket authentication required') },
-            requireRole: () => { throw new Error('WebSocket authentication required') }
-          })
-        },
-        onConnect: async (ctx) => {
-          console.log('🔌 WebSocket соединение установлено')
-        },
-        onDisconnect: async (ctx) => {
-          console.log('🔌 WebSocket соединение закрыто')
+    // Настраиваем обработчик WebSocket подключений
+    const serverCleanup = useServer({
+      schema,
+      context: async (ctx) => {
+        // Извлекаем токен из query параметров или заголовков
+        const token = ctx.connectionParams?.authorization as string ||
+                     ctx.connectionParams?.token as string
+
+        if (token) {
+          try {
+            // Валидируем токен и создаем контекст
+            const authContext = { token, user: undefined, permissions: [] }
+            // TODO: Валидация токена для WebSocket
+            return createGraphQLContext(authContext)
+          } catch (error) {
+            console.error('WebSocket auth error:', error)
+            throw new Error('Unauthorized')
+          }
         }
+
+        // Возвращаем контекст без аутентификации
+        return createGraphQLContext({ permissions: [] })
       },
-      this.wsServer
+      onConnect: (ctx) => {
+        console.log('🔌 WebSocket подключение установлено')
+      },
+      onDisconnect: (ctx) => {
+        console.log('🔌 WebSocket подключение закрыто')
+      }
+    }, this.wsServer)
+
+    // Сохраняем cleanup функцию для graceful shutdown
+    this.wsServer.on('close', serverCleanup)
+
+    console.log('✅ WebSocket настроен')
+  }
+
+  /**
+   * Настройка Apollo GraphQL сервера
+   */
+  private async setupApolloServer(): Promise<void> {
+    console.log('🚀 Настройка Apollo GraphQL сервера...')
+
+    this.apolloServer = new ApolloServer<Context>({
+      schema,
+      formatError: formatGraphQLError,
+      introspection: config.GRAPHQL_INTROSPECTION,
+      
+      plugins: [
+        // Graceful shutdown для HTTP сервера
+        ApolloServerPluginDrainHttpServer({ httpServer: this.httpServer }),
+        
+        // Landing page настройки
+        config.GRAPHQL_PLAYGROUND 
+          ? ApolloServerPluginLandingPageLocalDefault({ footer: false })
+          : ApolloServerPluginLandingPageLocalDefault({ footer: false }),
+        
+        // Логирование операций
+        {
+          requestDidStart() {
+            return {
+              didResolveOperation({ operationName, variables, request }) {
+                if (config.NODE_ENV === 'development') {
+                  console.log(`📊 GraphQL операция: ${operationName || 'Anonymous'}`)
+                }
+              },
+              didEncounterErrors({ errors, operationName, request }) {
+                console.error(`❌ GraphQL ошибки в операции ${operationName}:`)
+                errors.forEach(error => {
+                  console.error(`  - ${error.message}`)
+                  if (config.NODE_ENV === 'development') {
+                    console.error(`    Path: ${error.path?.join('.')}`)
+                    console.error(`    Extensions:`, error.extensions)
+                  }
+                })
+              },
+              willSendResponse({ response }) {
+                // Добавляем кастомные заголовки
+                response.http?.headers.set('X-API-Version', config.API_VERSION)
+              }
+            }
+          }
+        }
+      ]
+    })
+
+    await this.apolloServer.start()
+
+    // Подключаем Apollo к Express
+    this.app.use(
+      '/graphql',
+      expressMiddleware(this.apolloServer, {
+        context: async ({ req, res }) => {
+          // Создаем контекст аутентификации из Express middleware
+          const authContext = authMiddleware.createAuthContext(req as any)
+          const context = createGraphQLContext(authContext)
+          
+          // Добавляем req/res в контекст если нужны
+          context.req = req
+          context.res = res
+          
+          return context
+        }
+      })
     )
 
-    console.log('✅ WebSocket сервер настроен')
+    console.log('✅ Apollo GraphQL сервер настроен')
   }
 
   /**
-   * Настраивает обработку ошибок
-   */
-  private setupErrorHandling(): void {
-    console.log('🚨 Настройка обработки ошибок...')
-
-    // Глобальные обработчики ошибок процесса
-    setupGlobalErrorHandlers()
-
-    // Middleware для 404 ошибок
-    this.app.use(notFoundMiddleware)
-
-    // Центральный обработчик ошибок Express
-    this.app.use(errorHandlerMiddleware)
-
-    console.log('✅ Обработка ошибок настроена')
-  }
-
-  /**
-   * Проверяет соединения с внешними сервисами
-   */
-  private async checkExternalServices(): Promise<void> {
-    console.log('🔍 Проверка подключений к внешним сервисам...')
-
-    // Проверяем подключение к базе данных
-    const dbConnected = await checkDatabaseConnection()
-    if (!dbConnected) {
-      throw new Error('❌ Не удалось подключиться к базе данных')
-    }
-    console.log('✅ База данных подключена')
-
-    // TODO: Проверяем Redis
-    // TODO: Проверяем Telegram Bot API
-
-    console.log('✅ Все внешние сервисы доступны')
-  }
-
-  /**
-   * Настраивает graceful shutdown
+   * Настройка graceful shutdown
    */
   private setupGracefulShutdown(): void {
     const shutdown = async (signal: string) => {
-      console.log(`\n📶 Получен сигнал ${signal}, начинаем graceful shutdown...`)
+      console.log(`\n📴 Получен сигнал ${signal}. Начинаем graceful shutdown...`)
 
-      // Даем время на завершение текущих запросов
-      this.httpServer.close((err) => {
-        if (err) {
-          console.error('❌ Ошибка при закрытии HTTP сервера:', err)
-        } else {
-          console.log('✅ HTTP сервер закрыт')
-        }
-      })
-
-      // Закрываем Apollo Server
-      if (this.apolloServer) {
-        await this.apolloServer.stop()
-        console.log('✅ Apollo Server остановлен')
-      }
-
-      // Закрываем WebSocket сервер
-      if (this.wsServer) {
-        this.wsServer.close()
-        console.log('✅ WebSocket сервер закрыт')
-      }
-
-      // Закрываем соединение с базой данных
       try {
-        await disconnectPrisma()
-        console.log('✅ Соединение с базой данных закрыто')
+        // Останавливаем Apollo сервер
+        if (this.apolloServer) {
+          await this.apolloServer.stop()
+          console.log('✅ Apollo сервер остановлен')
+        }
+
+        // Закрываем WebSocket сервер
+        if (this.wsServer) {
+          this.wsServer.close()
+          console.log('✅ WebSocket сервер остановлен')
+        }
+
+        // Закрываем HTTP сервер
+        if (this.httpServer) {
+          this.httpServer.close(() => {
+            console.log('✅ HTTP сервер остановлен')
+          })
+        }
+
+        // Закрываем подключения к БД
+        await this.prisma.$disconnect()
+        console.log('✅ Подключение к PostgreSQL закрыто')
+
+        if (this.redis) {
+          this.redis.disconnect()
+          console.log('✅ Подключение к Redis закрыто')
+        }
+
+        console.log('👋 Graceful shutdown завершен')
+        process.exit(0)
+
       } catch (error) {
-        console.error('❌ Ошибка при закрытии соединения с БД:', error)
+        console.error('❌ Ошибка во время shutdown:', error)
+        process.exit(1)
       }
-
-      // TODO: Закрыть другие соединения (Redis, внешние API)
-
-      console.log('👋 Graceful shutdown завершен')
-      process.exit(0)
     }
 
+    // Обработчики сигналов
     process.on('SIGTERM', () => shutdown('SIGTERM'))
     process.on('SIGINT', () => shutdown('SIGINT'))
+
+    // Обработчик необработанных ошибок
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason)
+      // Не завершаем процесс автоматически, логируем для анализа
+    })
+
+    process.on('uncaughtException', (error) => {
+      console.error('❌ Uncaught Exception:', error)
+      shutdown('UNCAUGHT_EXCEPTION')
+    })
   }
 
   /**
-   * Запускает сервер
-   */
-  async start(): Promise<void> {
-    try {
-      console.log('🚀 Запуск BuddyBot API сервера...')
-      
-      // Логируем конфигурацию
-      logConfig()
-
-      // Проверяем внешние сервисы
-      await this.checkExternalServices()
-
-      // Настраиваем компоненты
-      this.setupExpressMiddleware()
-      this.setupRoutes()
-      await this.setupApolloServer()
-      this.setupWebSocketServer()
-      this.setupErrorHandling()
-      this.setupGracefulShutdown()
-
-      // Запускаем HTTP сервер
-      this.httpServer.listen(config.PORT, () => {
-        console.log('\n🎉 BuddyBot API сервер успешно запущен!')
-        console.log(`📍 HTTP сервер: http://localhost:${config.PORT}`)
-        console.log(`🚀 GraphQL API: http://localhost:${config.PORT}/graphql`)
-        
-        if (config.GRAPHQL_PLAYGROUND) {
-          console.log(`🎮 GraphQL Playground: http://localhost:${config.PORT}/graphql`)
-        }
-        
-        console.log(`🔌 WebSocket (подписки): ws://localhost:${config.PORT}/graphql`)
-        console.log(`❤️ Health check: http://localhost:${config.PORT}/health`)
-        console.log(`📋 Окружение: ${config.NODE_ENV}`)
-        console.log('📖 API готов к работе!\n')
-      })
-
-    } catch (error) {
-      console.error('💀 Критическая ошибка при запуске сервера:', error)
-      process.exit(1)
-    }
-  }
-
-  /**
-   * Останавливает сервер
+   * Остановка сервера
    */
   async stop(): Promise<void> {
-    console.log('🛑 Остановка сервера...')
-    
-    if (this.httpServer) {
-      this.httpServer.close()
-    }
-    
+    console.log('🛑 Останавливаем сервер...')
+
     if (this.apolloServer) {
       await this.apolloServer.stop()
     }
-    
-    await disconnectPrisma()
+
+    if (this.httpServer) {
+      this.httpServer.close()
+    }
+
+    await this.prisma.$disconnect()
+
+    if (this.redis) {
+      this.redis.disconnect()
+    }
+
     console.log('✅ Сервер остановлен')
   }
 }
 
 /**
- * Создаем и запускаем сервер, если файл запущен напрямую
+ * Функция для запуска сервера (если файл запускается напрямую)
  */
-async function bootstrap() {
+async function main() {
   const server = new BuddyBotServer()
   await server.start()
 }
 
-// Запускаем сервер только если файл вызван напрямую (не через import)
+// Запускаем сервер если файл выполняется напрямую
 if (require.main === module) {
-  bootstrap().catch((error) => {
-    console.error('💀 Фатальная ошибка при запуске:', error)
+  main().catch(error => {
+    console.error('❌ Критическая ошибка при запуске сервера:', error)
     process.exit(1)
   })
 }
 
 export { BuddyBotServer }
+export default BuddyBotServer
