@@ -1,565 +1,647 @@
 /**
  * GraphQL типы для снапшотов
  * 
- * Определяет типы для снапшотов потоков, шагов и компонентов.
- * Эти типы используются клиентами для получения неизменяемых
- * копий контента, с которыми работают пользователи.
+ * Файл: packages/api/src/schema/types/snapshot/snapshot.type.ts
  * 
- * Ключевые типы:
- * - FlowSnapshot: снапшот всего потока
- * - FlowStepSnapshot: снапшот отдельного шага
- * - ComponentSnapshot: снапшот компонента (статья, задание, квиз, видео)
+ * Определяет GraphQL типы для работы со снапшотами потоков, шагов и компонентов.
+ * Эти типы обеспечивают типобезопасный API для клиентских приложений.
  */
 
 import { builder } from '../../index'
+import { FlowSnapshot } from '../../../core/entities/FlowSnapshot'
+import { FlowStepSnapshot } from '../../../core/entities/FlowStepSnapshot'
+import { ComponentSnapshot, ComponentType } from '../../../core/entities/ComponentSnapshot'
 
-// ===== БАЗОВЫЕ СКАЛЯРНЫЕ ТИПЫ =====
+// ===== СКАЛЯРНЫЕ ТИПЫ =====
 
-/**
- * JSON данные компонента
- */
-builder.scalarType('ComponentData', {
-  description: 'JSON данные компонента (зависят от типа компонента)',
+const JSONScalar = builder.scalarType('JSON', {
   serialize: (value) => value,
   parseValue: (value) => value,
 })
 
-/**
- * Условия разблокировки
- */
-builder.scalarType('UnlockConditions', {
-  description: 'JSON массив условий разблокировки шага',
-  serialize: (value) => value,
-  parseValue: (value) => value,
+// ===== ЕНУМЫ =====
+
+const ComponentTypeEnum = builder.enumType('ComponentType', {
+  values: ['ARTICLE', 'TASK', 'QUIZ', 'VIDEO'] as const,
+  description: 'Типы компонентов в снапшотах'
 })
 
-/**
- * Требования завершения
- */
-builder.scalarType('CompletionRequirements', {
-  description: 'JSON объект требований для завершения шага',
-  serialize: (value) => value,
-  parseValue: (value) => value,
+const DifficultyEnum = builder.enumType('Difficulty', {
+  values: ['EASY', 'MEDIUM', 'HARD'] as const,
+  description: 'Уровни сложности компонентов'
 })
 
-// ===== ПЕРЕЧИСЛЕНИЯ =====
-
-/**
- * Типы компонентов
- */
-builder.enumType('ComponentType', {
-  description: 'Тип компонента в потоке',
-  values: {
-    ARTICLE: { description: 'Статья для чтения' },
-    TASK: { description: 'Задание с кодовым словом' },
-    QUIZ: { description: 'Квиз с вопросами' },
-    VIDEO: { description: 'Видео для просмотра' }
-  }
+const QuizTypeEnum = builder.enumType('QuizType', {
+  values: ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE'] as const,
+  description: 'Типы квизов'
 })
 
-/**
- * Уровни сложности потока
- */
-builder.enumType('FlowDifficulty', {
-  description: 'Уровень сложности потока',
-  values: {
-    BEGINNER: { description: 'Начальный уровень' },
-    INTERMEDIATE: { description: 'Средний уровень' },
-    ADVANCED: { description: 'Продвинутый уровень' }
-  }
-})
+// ===== VALUE OBJECT ТИПЫ =====
 
-// ===== ИНТЕРФЕЙСЫ =====
-
-/**
- * Базовый интерфейс для всех снапшотов
- */
-builder.interfaceType('BaseSnapshot', {
-  description: 'Базовый интерфейс для всех типов снапшотов',
+const FlowSnapshotMetadataType = builder.objectType('FlowSnapshotMetadata', {
+  description: 'Метаданные снапшота потока',
   fields: (t) => ({
-    id: t.id({ description: 'Уникальный идентификатор снапшота' }),
-    createdAt: t.field({ 
-      type: 'DateTime',
-      description: 'Дата и время создания снапшота'
+    snapshotVersion: t.exposeString('snapshotVersion', {
+      description: 'Версия снапшота для обратной совместимости'
     }),
-    snapshotVersion: t.string({
-      description: 'Версия алгоритма создания снапшота'
+    sizeBytes: t.exposeInt('sizeBytes', {
+      description: 'Размер снапшота в байтах'
     }),
-    createdBy: t.string({
-      description: 'ID пользователя, создавшего снапшот'
+    creationTimeMs: t.exposeFloat('creationTimeMs', {
+      description: 'Время создания снапшота в миллисекундах'
+    }),
+    totalSteps: t.exposeInt('totalSteps', {
+      description: 'Общее количество шагов в снапшоте'
+    }),
+    totalComponents: t.exposeInt('totalComponents', {
+      description: 'Общее количество компонентов в снапшоте'
+    }),
+    contentHash: t.exposeString('contentHash', {
+      description: 'Хеш содержимого для проверки целостности'
     })
   })
 })
 
-// ===== ТИПЫ СНАПШОТОВ =====
-
-/**
- * Снапшот потока
- */
-builder.objectType('FlowSnapshot', {
-  description: 'Неизменяемый снапшот потока на момент назначения пользователю',
-  interfaces: ['BaseSnapshot'],
+const OriginalFlowReferenceType = builder.objectType('OriginalFlowReference', {
+  description: 'Ссылка на оригинальный поток',
   fields: (t) => ({
-    // Базовые поля из интерфейса
-    id: t.id(),
-    createdAt: t.field({ type: 'DateTime' }),
-    snapshotVersion: t.string(),
-    createdBy: t.string(),
-    
-    // Специфичные поля
-    assignmentId: t.id({
-      description: 'ID назначения, к которому относится снапшот'
-    }),
-    originalFlowId: t.id({
+    originalFlowId: t.exposeString('originalFlowId', {
       description: 'ID оригинального потока'
     }),
-    title: t.string({
-      description: 'Название потока'
+    originalFlowVersion: t.exposeString('originalFlowVersion', {
+      description: 'Версия оригинального потока'
     }),
-    description: t.string({
-      description: 'Описание потока'
+    originalFlowTitle: t.exposeString('originalFlowTitle', {
+      description: 'Название оригинального потока'
     }),
-    version: t.string({
-      description: 'Версия потока на момент снапшота'
-    }),
-    estimatedDuration: t.int({
+    originalFlowDescription: t.exposeString('originalFlowDescription', {
       nullable: true,
-      description: 'Примерное время прохождения (в минутах)'
+      description: 'Описание оригинального потока'
+    })
+  })
+})
+
+const ComponentSnapshotMetadataType = builder.objectType('ComponentSnapshotMetadata', {
+  description: 'Метаданные снапшота компонента',
+  fields: (t) => ({
+    snapshotVersion: t.exposeString('snapshotVersion'),
+    componentType: t.field({
+      type: ComponentTypeEnum,
+      resolve: (metadata: any) => metadata.componentType
     }),
+    contentSize: t.exposeInt('contentSize'),
+    estimatedDurationMinutes: t.exposeInt('estimatedDurationMinutes', { nullable: true }),
     difficulty: t.field({
-      type: 'FlowDifficulty',
+      type: DifficultyEnum,
       nullable: true,
-      description: 'Уровень сложности'
+      resolve: (metadata: any) => metadata.difficulty
     }),
-    tags: t.stringList({
-      description: 'Теги для категоризации'
+    tags: t.exposeStringList('tags')
+  })
+})
+
+// ===== ТИПЫ СОДЕРЖИМОГО КОМПОНЕНТОВ =====
+
+const ArticleContentType = builder.objectType('ArticleContent', {
+  description: 'Содержимое статьи',
+  fields: (t) => ({
+    text: t.exposeString('text', {
+      description: 'Основной текст статьи'
     }),
-    stepCount: t.int({
-      description: 'Количество шагов в потоке',
-      resolve: (flowSnapshot, _, context) => {
-        return flowSnapshot.stepSnapshotIds?.length || 0
-      }
-    }),
-    
-    // Связанные данные
-    stepSnapshots: t.field({
-      type: ['FlowStepSnapshot'],
-      description: 'Снапшоты шагов потока',
-      resolve: async (flowSnapshot, _, context) => {
-        const stepSnapshots = await context.prisma.flowStepSnapshot.findMany({
-          where: { flowSnapshotId: flowSnapshot.id },
-          orderBy: { order: 'asc' }
-        })
-        return stepSnapshots
-      }
-    }),
-    
-    assignment: t.field({
-      type: 'FlowAssignment',
-      description: 'Назначение, к которому относится снапшот',
-      resolve: async (flowSnapshot, _, context) => {
-        const assignment = await context.prisma.flowAssignment.findUnique({
-          where: { id: flowSnapshot.assignmentId }
-        })
-        return assignment
-      }
-    }),
-    
-    // Метаданные
-    context: t.field({
-      type: 'JSON',
+    htmlContent: t.exposeString('htmlContent', {
       nullable: true,
-      description: 'Дополнительный контекст снапшота'
+      description: 'HTML разметка статьи'
+    }),
+    images: t.field({
+      type: [ImageAttachmentType],
+      resolve: (content: any) => content.images || []
+    }),
+    attachments: t.field({
+      type: [FileAttachmentType],
+      resolve: (content: any) => content.attachments || []
+    }),
+    externalLinks: t.field({
+      type: [ExternalLinkType],
+      resolve: (content: any) => content.externalLinks || []
     })
   })
 })
 
-/**
- * Снапшот шага потока
- */
-builder.objectType('FlowStepSnapshot', {
-  description: 'Неизменяемый снапшот шага потока',
-  interfaces: ['BaseSnapshot'],
+const TaskContentType = builder.objectType('TaskContent', {
+  description: 'Содержимое задания',
   fields: (t) => ({
-    // Базовые поля
-    id: t.id(),
-    createdAt: t.field({ type: 'DateTime' }),
-    snapshotVersion: t.string(),
-    createdBy: t.string(),
-    
-    // Специфичные поля
-    flowSnapshotId: t.id({
-      description: 'ID снапшота потока'
+    instruction: t.exposeString('instruction', {
+      description: 'Инструкция к заданию'
     }),
-    originalStepId: t.id({
-      description: 'ID оригинального шага'
-    }),
-    title: t.string({
-      description: 'Название шага'
-    }),
-    description: t.string({
-      description: 'Описание шага'
-    }),
-    order: t.int({
-      description: 'Порядковый номер шага в потоке'
-    }),
-    estimatedDuration: t.int({
+    correctAnswer: t.exposeString('correctAnswer', {
       nullable: true,
-      description: 'Примерное время прохождения шага (в минутах)'
+      description: 'Правильный ответ (может быть скрыт от пользователя)'
     }),
-    icon: t.string({
+    alternativeAnswers: t.exposeStringList('alternativeAnswers', {
       nullable: true,
-      description: 'Иконка или emoji для шага'
+      description: 'Альтернативные правильные ответы'
     }),
-    themeColor: t.string({
+    hint: t.exposeString('hint', {
       nullable: true,
-      description: 'Цвет темы шага (hex)'
+      description: 'Подсказка для пользователя'
     }),
-    componentCount: t.int({
-      description: 'Количество компонентов в шаге',
-      resolve: (stepSnapshot, _, context) => {
-        return stepSnapshot.componentSnapshotIds?.length || 0
-      }
-    }),
-    
-    // Условия и требования
-    unlockConditions: t.field({
-      type: 'UnlockConditions',
-      description: 'Условия разблокировки шага'
-    }),
-    completionRequirements: t.field({
-      type: 'CompletionRequirements',
-      description: 'Требования для завершения шага'
-    }),
-    
-    // Связанные данные
-    flowSnapshot: t.field({
-      type: 'FlowSnapshot',
-      description: 'Снапшот потока, к которому относится шаг',
-      resolve: async (stepSnapshot, _, context) => {
-        const flowSnapshot = await context.prisma.flowSnapshot.findUnique({
-          where: { id: stepSnapshot.flowSnapshotId }
-        })
-        return flowSnapshot
-      }
-    }),
-    
-    componentSnapshots: t.field({
-      type: ['ComponentSnapshot'],
-      description: 'Снапшоты компонентов этого шага',
-      resolve: async (stepSnapshot, _, context) => {
-        const componentSnapshots = await context.prisma.componentSnapshot.findMany({
-          where: { stepSnapshotId: stepSnapshot.id },
-          orderBy: { order: 'asc' }
-        })
-        return componentSnapshots
-      }
-    }),
-    
-    // Прогресс пользователя по шагу
-    userProgress: t.field({
-      type: 'StepProgress',
+    examples: t.exposeStringList('examples', {
       nullable: true,
-      description: 'Прогресс текущего пользователя по этому шагу',
-      resolve: async (stepSnapshot, _, context) => {
-        const currentUser = context.user
-        if (!currentUser) return null
-        
-        // Получаем прогресс пользователя по всем компонентам шага
-        const componentProgress = await context.prisma.componentProgress.findMany({
-          where: {
-            userId: currentUser.id,
-            componentSnapshotId: {
-              in: stepSnapshot.componentSnapshotIds || []
-            }
-          }
-        })
-        
-        // Вычисляем прогресс шага
-        const totalComponents = stepSnapshot.componentSnapshotIds?.length || 0
-        const completedComponents = componentProgress.filter(p => p.status === 'COMPLETED').length
-        const progressPercentage = totalComponents > 0 ? Math.round((completedComponents / totalComponents) * 100) : 0
-        
-        // Определяем статус шага
-        let status = 'LOCKED'
-        if (completedComponents === totalComponents && totalComponents > 0) {
-          status = 'COMPLETED'
-        } else if (componentProgress.length > 0) {
-          status = 'IN_PROGRESS'
-        } else {
-          // Здесь должна быть логика проверки условий разблокировки
-          status = 'AVAILABLE' // Упрощение
-        }
-        
-        return {
-          stepSnapshotId: stepSnapshot.id,
-          status,
-          progressPercentage,
-          completedComponents,
-          totalComponents,
-          lastActivity: componentProgress.length > 0 ? 
-            Math.max(...componentProgress.map(p => p.updatedAt.getTime())) : null
-        }
-      }
+      description: 'Примеры правильных ответов'
+    }),
+    maxAnswerLength: t.exposeInt('maxAnswerLength', {
+      nullable: true,
+      description: 'Максимальная длина ответа'
+    }),
+    validationSettings: t.field({
+      type: TaskValidationSettingsType,
+      nullable: true,
+      resolve: (content: any) => content.validationSettings
     })
   })
 })
 
-/**
- * Снапшот компонента
- */
-builder.objectType('ComponentSnapshot', {
-  description: 'Неизменяемый снапшот компонента (статья, задание, квиз, видео)',
-  interfaces: ['BaseSnapshot'],
+const QuizContentType = builder.objectType('QuizContent', {
+  description: 'Содержимое квиза',
   fields: (t) => ({
-    // Базовые поля
-    id: t.id(),
-    createdAt: t.field({ type: 'DateTime' }),
-    snapshotVersion: t.string(),
-    createdBy: t.string(),
-    
-    // Специфичные поля
-    stepSnapshotId: t.id({
-      description: 'ID снапшота шага'
+    question: t.exposeString('question', {
+      description: 'Вопрос квиза'
     }),
-    originalComponentId: t.id({
-      description: 'ID оригинального компонента'
+    options: t.field({
+      type: [QuizOptionType],
+      description: 'Варианты ответов',
+      resolve: (content: any) => content.options || []
     }),
-    type: t.field({
-      type: 'ComponentType',
-      description: 'Тип компонента'
+    quizType: t.field({
+      type: QuizTypeEnum,
+      description: 'Тип квиза',
+      resolve: (content: any) => content.quizType
     }),
-    typeVersion: t.string({
-      description: 'Версия типа компонента'
-    }),
-    order: t.int({
-      description: 'Порядковый номер компонента в шаге'
-    }),
-    isRequired: t.boolean({
-      description: 'Является ли компонент обязательным'
-    }),
-    
-    // Универсальные поля (извлекаются из data в зависимости от типа)
-    title: t.string({
-      description: 'Название компонента',
-      resolve: (componentSnapshot, _, context) => {
-        const data = componentSnapshot.data as any
-        return data?.title || 'Untitled Component'
-      }
-    }),
-    
-    description: t.string({
+    explanation: t.exposeString('explanation', {
       nullable: true,
-      description: 'Описание компонента',
-      resolve: (componentSnapshot, _, context) => {
-        const data = componentSnapshot.data as any
-        return data?.description || data?.summary || null
-      }
+      description: 'Объяснение правильного ответа'
     }),
-    
-    estimatedDuration: t.int({
+    showResultImmediately: t.exposeBoolean('showResultImmediately', {
       nullable: true,
-      description: 'Примерное время прохождения (в минутах)',
-      resolve: (componentSnapshot, _, context) => {
-        const data = componentSnapshot.data as any
-        
-        switch (componentSnapshot.type) {
-          case 'ARTICLE':
-            return data?.estimatedReadTime || 5
-          case 'VIDEO':
-            return data?.duration ? Math.ceil(data.duration / 60) : 10
-          case 'TASK':
-            return 10
-          case 'QUIZ':
-            const questionsCount = data?.questions?.length || 1
-            return Math.max(questionsCount * 2, 5)
-          default:
-            return 5
-        }
-      }
+      description: 'Показывать результат сразу после ответа'
     }),
-    
-    // Типизированные данные компонента
-    data: t.field({
-      type: 'ComponentData',
-      description: 'Данные компонента (структура зависит от типа)'
-    }),
-    
-    // Связанные данные
-    stepSnapshot: t.field({
-      type: 'FlowStepSnapshot',
-      description: 'Снапшот шага, к которому относится компонент',
-      resolve: async (componentSnapshot, _, context) => {
-        const stepSnapshot = await context.prisma.flowStepSnapshot.findUnique({
-          where: { id: componentSnapshot.stepSnapshotId }
-        })
-        return stepSnapshot
-      }
-    }),
-    
-    // Прогресс пользователя по компоненту
-    userProgress: t.field({
-      type: 'ComponentProgress',
+    shuffleOptions: t.exposeBoolean('shuffleOptions', {
       nullable: true,
-      description: 'Прогресс текущего пользователя по этому компоненту',
-      resolve: async (componentSnapshot, _, context) => {
-        const currentUser = context.user
-        if (!currentUser) return null
-        
-        const progress = await context.prisma.componentProgress.findFirst({
-          where: {
-            componentSnapshotId: componentSnapshot.id,
-            userId: currentUser.id
-          }
-        })
-        return progress
-      }
+      description: 'Перемешивать варианты ответов'
+    })
+  })
+})
+
+const VideoContentType = builder.objectType('VideoContent', {
+  description: 'Содержимое видео',
+  fields: (t) => ({
+    videoUrl: t.exposeString('videoUrl', {
+      description: 'URL видео файла'
+    }),
+    duration: t.exposeInt('duration', {
+      nullable: true,
+      description: 'Продолжительность видео в секундах'
+    }),
+    thumbnail: t.exposeString('thumbnail', {
+      nullable: true,
+      description: 'URL изображения-превью'
+    }),
+    subtitles: t.field({
+      type: [VideoSubtitleType],
+      resolve: (content: any) => content.subtitles || []
+    }),
+    chapters: t.field({
+      type: [VideoChapterType],
+      resolve: (content: any) => content.chapters || []
+    }),
+    requireFullWatch: t.exposeBoolean('requireFullWatch', {
+      nullable: true,
+      description: 'Требуется ли просмотр до конца'
+    }),
+    minWatchPercentage: t.exposeInt('minWatchPercentage', {
+      nullable: true,
+      description: 'Минимальный процент просмотра'
     })
   })
 })
 
 // ===== ВСПОМОГАТЕЛЬНЫЕ ТИПЫ =====
 
-/**
- * Прогресс по шагу (вычисляемый тип)
- */
-builder.objectType('StepProgress', {
-  description: 'Прогресс пользователя по шагу',
+const ImageAttachmentType = builder.objectType('ImageAttachment', {
   fields: (t) => ({
-    stepSnapshotId: t.id({
-      description: 'ID снапшота шага'
-    }),
-    status: t.string({
-      description: 'Статус шага: LOCKED, AVAILABLE, IN_PROGRESS, COMPLETED'
-    }),
-    progressPercentage: t.int({
-      description: 'Процент завершения шага (0-100)'
-    }),
-    completedComponents: t.int({
-      description: 'Количество завершенных компонентов'
-    }),
-    totalComponents: t.int({
-      description: 'Общее количество компонентов в шаге'
-    }),
-    lastActivity: t.field({
-      type: 'DateTime',
-      nullable: true,
-      description: 'Время последней активности в этом шаге'
-    })
+    url: t.exposeString('url'),
+    alt: t.exposeString('alt', { nullable: true }),
+    caption: t.exposeString('caption', { nullable: true })
   })
 })
 
-/**
- * Статистика снапшота
- */
-builder.objectType('SnapshotStats', {
-  description: 'Статистика снапшота потока',
+const FileAttachmentType = builder.objectType('FileAttachment', {
   fields: (t) => ({
-    totalSteps: t.int({
-      description: 'Общее количество шагов'
-    }),
-    totalComponents: t.int({
-      description: 'Общее количество компонентов'
-    }),
-    createdAt: t.field({
-      type: 'DateTime',
-      description: 'Дата создания снапшота'
-    }),
-    sizeInBytes: t.int({
-      description: 'Приблизительный размер снапшота в байтах'
-    }),
-    snapshotVersion: t.string({
-      description: 'Версия алгоритма создания снапшота'
-    })
+    url: t.exposeString('url'),
+    filename: t.exposeString('filename'),
+    fileType: t.exposeString('fileType'),
+    size: t.exposeInt('size')
   })
 })
 
-// ===== ТИПЫ ДЛЯ СПЕЦИАЛИЗИРОВАННЫХ КОМПОНЕНТОВ =====
-
-/**
- * Интерфейс для всех типов компонентов
- */
-builder.interfaceType('ComponentSnapshotInterface', {
-  description: 'Базовый интерфейс для всех типов компонентов',
+const ExternalLinkType = builder.objectType('ExternalLink', {
   fields: (t) => ({
-    id: t.id(),
-    type: t.field({ type: 'ComponentType' }),
-    title: t.string(),
-    order: t.int(),
-    isRequired: t.boolean(),
-    estimatedDuration: t.int({ nullable: true })
+    url: t.exposeString('url'),
+    title: t.exposeString('title'),
+    description: t.exposeString('description', { nullable: true })
   })
 })
 
-/**
- * Снапшот статьи
- */
-builder.objectType('ArticleComponentSnapshot', {
-  description: 'Снапшот компонента-статьи',
-  interfaces: ['ComponentSnapshotInterface'],
+const TaskValidationSettingsType = builder.objectType('TaskValidationSettings', {
   fields: (t) => ({
-    // Базовые поля из интерфейса
-    id: t.id(),
-    type: t.field({ type: 'ComponentType' }),
-    title: t.string(),
-    order: t.int(),
-    isRequired: t.boolean(),
-    estimatedDuration: t.int({ nullable: true }),
+    caseSensitive: t.exposeBoolean('caseSensitive', { nullable: true }),
+    trimWhitespace: t.exposeBoolean('trimWhitespace', { nullable: true }),
+    allowPartialMatch: t.exposeBoolean('allowPartialMatch', { nullable: true }),
+    regexPattern: t.exposeString('regexPattern', { nullable: true })
+  })
+})
+
+const QuizOptionType = builder.objectType('QuizOption', {
+  fields: (t) => ({
+    id: t.exposeString('id'),
+    text: t.exposeString('text'),
+    isCorrect: t.exposeBoolean('isCorrect'),
+    explanation: t.exposeString('explanation', { nullable: true })
+  })
+})
+
+const VideoSubtitleType = builder.objectType('VideoSubtitle', {
+  fields: (t) => ({
+    language: t.exposeString('language'),
+    url: t.exposeString('url')
+  })
+})
+
+const VideoChapterType = builder.objectType('VideoChapter', {
+  fields: (t) => ({
+    time: t.exposeInt('time'),
+    title: t.exposeString('title'),
+    description: t.exposeString('description', { nullable: true })
+  })
+})
+
+// ===== UNION ТИП ДЛЯ СОДЕРЖИМОГО КОМПОНЕНТОВ =====
+
+const ComponentContentUnion = builder.unionType('ComponentContent', {
+  types: [ArticleContentType, TaskContentType, QuizContentType, VideoContentType],
+  resolveType: (content: any, context: any, info: any) => {
+    // Определяем тип по структуре данных
+    if (content.text && (content.images !== undefined || content.attachments !== undefined)) {
+      return ArticleContentType
+    }
+    if (content.instruction) {
+      return TaskContentType
+    }
+    if (content.question && content.options) {
+      return QuizContentType
+    }
+    if (content.videoUrl) {
+      return VideoContentType
+    }
     
-    // Специфичные поля для статьи
-    content: t.string({
-      description: 'Содержимое статьи (Markdown/HTML)'
-    }),
-    summary: t.string({
-      nullable: true,
-      description: 'Краткое изложение статьи'
-    }),
-    estimatedReadTime: t.int({
-      nullable: true,
-      description: 'Примерное время чтения (в минутах)'
-    })
-    // TODO: добавить attachments
-  })
+    throw new Error('Неизвестный тип содержимого компонента')
+  },
+  description: 'Содержимое компонента различных типов'
 })
 
-/**
- * Снапшот задания
- */
-builder.objectType('TaskComponentSnapshot', {
-  description: 'Снапшот компонента-задания',
-  interfaces: ['ComponentSnapshotInterface'],
+// ===== ОСНОВНЫЕ ТИПЫ СНАПШОТОВ =====
+
+const ComponentSnapshotType = builder.objectRef<ComponentSnapshot>('ComponentSnapshot').implement({
+  description: 'Снапшот компонента - неизменяемая копия компонента',
   fields: (t) => ({
-    // Базовые поля
-    id: t.id(),
-    type: t.field({ type: 'ComponentType' }),
-    title: t.string(),
-    order: t.int(),
-    isRequired: t.boolean(),
-    estimatedDuration: t.int({ nullable: true }),
+    id: t.exposeID('id', {
+      description: 'Уникальный ID снапшота компонента'
+    }),
     
-    // Специфичные поля для задания
+    stepSnapshotId: t.exposeString('stepSnapshotId', {
+      description: 'ID снапшота шага, к которому принадлежит компонент'
+    }),
+    
+    title: t.string({
+      description: 'Название компонента',
+      resolve: (snapshot) => snapshot.title
+    }),
+    
     description: t.string({
-      description: 'Описание задания'
-    }),
-    instruction: t.string({
-      description: 'Подробная инструкция по выполнению'
-    }),
-    hint: t.string({
       nullable: true,
-      description: 'Подсказка для выполнения'
+      description: 'Описание компонента',
+      resolve: (snapshot) => snapshot.description
     }),
+    
+    type: t.field({
+      type: ComponentTypeEnum,
+      description: 'Тип компонента',
+      resolve: (snapshot) => snapshot.type
+    }),
+    
+    content: t.field({
+      type: ComponentContentUnion,
+      description: 'Содержимое компонента',
+      resolve: (snapshot) => snapshot.content
+    }),
+    
+    metadata: t.field({
+      type: ComponentSnapshotMetadataType,
+      description: 'Метаданные снапшота компонента',
+      resolve: (snapshot) => snapshot.metadata
+    }),
+    
+    isRequired: t.boolean({
+      description: 'Является ли компонент обязательным',
+      resolve: (snapshot) => snapshot.isRequired
+    }),
+    
+    order: t.int({
+      description: 'Порядковый номер компонента в шаге',
+      resolve: (snapshot) => snapshot.order
+    }),
+    
     maxAttempts: t.int({
       nullable: true,
       description: 'Максимальное количество попыток',
-      resolve: (taskSnapshot, _, context) => {
-        const data = taskSnapshot.data as any
-        return data?.validationSettings?.maxAttempts || null
-      }
+      resolve: (snapshot) => snapshot.maxAttempts
+    }),
+    
+    estimatedDuration: t.int({
+      nullable: true,
+      description: 'Приблизительное время прохождения в минутах',
+      resolve: (snapshot) => snapshot.estimatedDuration
+    }),
+    
+    difficulty: t.field({
+      type: DifficultyEnum,
+      nullable: true,
+      description: 'Уровень сложности',
+      resolve: (snapshot) => snapshot.difficulty
+    }),
+    
+    tags: t.stringList({
+      description: 'Теги компонента',
+      resolve: (snapshot) => snapshot.tags
+    }),
+    
+    settings: t.field({
+      type: JSONScalar,
+      nullable: true,
+      description: 'Дополнительные настройки компонента',
+      resolve: (snapshot) => snapshot.settings
+    }),
+    
+    createdAt: t.string({
+      description: 'Дата создания снапшота',
+      resolve: (snapshot) => snapshot.createdAt.toISOString()
+    }),
+    
+    // ===== ВЫЧИСЛЯЕМЫЕ ПОЛЯ =====
+    
+    hasTimeLimit: t.boolean({
+      description: 'Есть ли временные ограничения',
+      resolve: (snapshot) => snapshot.hasTimeLimit
+    }),
+    
+    allowsMultipleAttempts: t.boolean({
+      description: 'Разрешены ли множественные попытки',
+      resolve: (snapshot) => snapshot.allowsMultipleAttempts
     })
-    // Правильный ответ не передаем клиенту из соображений безопасности
   })
 })
 
-// TODO: Добавить QuizComponentSnapshot и VideoComponentSnapshot аналогично
+const FlowStepSnapshotType = builder.objectRef<FlowStepSnapshot>('FlowStepSnapshot').implement({
+  description: 'Снапшот шага потока - неизменяемая копия шага со всеми компонентами',
+  fields: (t) => ({
+    id: t.exposeID('id', {
+      description: 'Уникальный ID снапшота шага'
+    }),
+    
+    flowSnapshotId: t.exposeString('flowSnapshotId', {
+      description: 'ID снапшота потока, к которому принадлежит шаг'
+    }),
+    
+    title: t.string({
+      description: 'Название шага',
+      resolve: (snapshot) => snapshot.title
+    }),
+    
+    description: t.string({
+      nullable: true,
+      description: 'Описание шага',
+      resolve: (snapshot) => snapshot.description
+    }),
+    
+    order: t.int({
+      description: 'Порядковый номер шага в потоке',
+      resolve: (snapshot) => snapshot.order
+    }),
+    
+    componentCount: t.int({
+      description: 'Количество компонентов в шаге',
+      resolve: (snapshot) => snapshot.componentCount
+    }),
+    
+    requiredComponentCount: t.int({
+      description: 'Количество обязательных компонентов',
+      resolve: (snapshot) => snapshot.requiredComponentCount
+    }),
+    
+    isSkippable: t.boolean({
+      description: 'Можно ли пропустить этот шаг',
+      resolve: (snapshot) => snapshot.isSkippable
+    }),
+    
+    requiresPreviousCompletion: t.boolean({
+      description: 'Требуется ли завершение предыдущих шагов',
+      resolve: (snapshot) => snapshot.requiresPreviousCompletion
+    }),
+    
+    estimatedDuration: t.int({
+      nullable: true,
+      description: 'Приблизительное время прохождения в минутах',
+      resolve: (snapshot) => snapshot.estimatedDuration
+    }),
+    
+    hasTimeLimit: t.boolean({
+      description: 'Есть ли временные ограничения на прохождение',
+      resolve: (snapshot) => snapshot.hasTimeLimit
+    }),
+    
+    createdAt: t.string({
+      description: 'Дата создания снапшота',
+      resolve: (snapshot) => snapshot.createdAt.toISOString()
+    }),
+    
+    // ===== СВЯЗАННЫЕ ДАННЫЕ =====
+    
+    components: t.field({
+      type: [ComponentSnapshotType],
+      description: 'Компоненты шага',
+      resolve: async (snapshot, args, context) => {
+        // TODO: Загрузить компоненты через репозиторий или DataLoader
+        return []
+      }
+    }),
+    
+    // ===== ВЫЧИСЛЯЕМЫЕ ПОЛЯ =====
+    
+    hasRequiredComponents: t.boolean({
+      description: 'Содержит ли шаг обязательные компоненты',
+      resolve: (snapshot) => snapshot.hasRequiredComponents
+    }),
+    
+    hasOptionalComponents: t.boolean({
+      description: 'Содержит ли шаг необязательные компоненты',
+      resolve: (snapshot) => snapshot.hasOptionalComponents
+    })
+  })
+})
 
-export {}
+const FlowSnapshotType = builder.objectRef<FlowSnapshot>('FlowSnapshot').implement({
+  description: 'Снапшот потока - неизменяемая копия всего потока со всеми шагами и компонентами',
+  fields: (t) => ({
+    id: t.exposeID('id', {
+      description: 'Уникальный ID снапшота потока'
+    }),
+    
+    assignmentId: t.exposeString('assignmentId', {
+      description: 'ID назначения, для которого создан снапшот'
+    }),
+    
+    originalFlowReference: t.field({
+      type: OriginalFlowReferenceType,
+      description: 'Ссылка на оригинальный поток',
+      resolve: (snapshot) => snapshot.originalFlowReference
+    }),
+    
+    metadata: t.field({
+      type: FlowSnapshotMetadataType,
+      description: 'Метаданные снапшота',
+      resolve: (snapshot) => snapshot.metadata
+    }),
+    
+    stepCount: t.int({
+      description: 'Количество шагов в снапшоте',
+      resolve: (snapshot) => snapshot.stepCount
+    }),
+    
+    isLarge: t.boolean({
+      description: 'Является ли снапшот большим (>10MB)',
+      resolve: (snapshot) => snapshot.isLarge
+    }),
+    
+    isRecent: t.boolean({
+      description: 'Является ли снапшот недавно созданным (<1 недели)',
+      resolve: (snapshot) => snapshot.isRecent
+    }),
+    
+    context: t.field({
+      type: JSONScalar,
+      nullable: true,
+      description: 'Дополнительный контекст снапшота',
+      resolve: (snapshot) => snapshot.context
+    }),
+    
+    createdBy: t.exposeString('createdBy', {
+      description: 'ID пользователя, создавшего снапшот'
+    }),
+    
+    createdAt: t.string({
+      description: 'Дата создания снапшота',
+      resolve: (snapshot) => snapshot.createdAt.toISOString()
+    }),
+    
+    updatedAt: t.string({
+      description: 'Дата последнего обновления',
+      resolve: (snapshot) => snapshot.updatedAt.toISOString()
+    }),
+    
+    // ===== СВЯЗАННЫЕ ДАННЫЕ =====
+    
+    steps: t.field({
+      type: [FlowStepSnapshotType],
+      description: 'Шаги снапшота потока',
+      resolve: async (snapshot, args, context) => {
+        // TODO: Загрузить шаги через репозиторий или DataLoader
+        return []
+      }
+    }),
+    
+    assignment: t.field({
+      type: 'FlowAssignment', // Ссылка на существующий тип
+      description: 'Назначение, для которого создан снапшот',
+      resolve: async (snapshot, args, context) => {
+        // TODO: Загрузить назначение через репозиторий
+        return null
+      }
+    }),
+    
+    // ===== НАВИГАЦИОННЫЕ МЕТОДЫ =====
+    
+    firstStepId: t.string({
+      nullable: true,
+      description: 'ID первого шага для навигации',
+      resolve: (snapshot) => snapshot.getFirstStepId()
+    }),
+    
+    lastStepId: t.string({
+      nullable: true,
+      description: 'ID последнего шага',
+      resolve: (snapshot) => snapshot.getLastStepId()
+    })
+  })
+})
+
+// ===== INPUT ТИПЫ ДЛЯ МУТАЦИЙ =====
+
+const ComponentSnapshotFilterInput = builder.inputType('ComponentSnapshotFilter', {
+  fields: (t) => ({
+    type: t.field({ type: ComponentTypeEnum, required: false }),
+    isRequired: t.boolean({ required: false }),
+    difficulty: t.field({ type: DifficultyEnum, required: false }),
+    tags: t.stringList({ required: false })
+  })
+})
+
+const FlowSnapshotFilterInput = builder.inputType('FlowSnapshotFilter', {
+  fields: (t) => ({
+    assignmentId: t.string({ required: false }),
+    originalFlowId: t.string({ required: false }),
+    createdBy: t.string({ required: false }),
+    snapshotVersion: t.string({ required: false }),
+    sizeRange: t.field({
+      type: builder.inputType('SizeRange', {
+        fields: (t) => ({
+          min: t.int({ required: false }),
+          max: t.int({ required: false })
+        })
+      }),
+      required: false
+    }),
+    createdDateRange: t.field({
+      type: builder.inputType('DateRange', {
+        fields: (t) => ({
+          from: t.string({ required: false }), // ISO date string
+          to: t.string({ required: false })
+        })
+      }),
+      required: false
+    })
+  })
+})
+
+// ===== ЭКСПОРТ =====
+
+export {
+  FlowSnapshotType,
+  FlowStepSnapshotType,
+  ComponentSnapshotType,
+  ComponentContentUnion,
+  FlowSnapshotFilterInput,
+  ComponentSnapshotFilterInput,
+  ComponentTypeEnum,
+  DifficultyEnum,
+  QuizTypeEnum
+}

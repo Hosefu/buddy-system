@@ -1,591 +1,705 @@
 /**
  * FlowSnapshotRepository - репозиторий для работы со снапшотами потоков
  * 
- * Обеспечивает доступ к данным снапшотов в базе данных.
- * Включает операции CRUD для всех типов снапшотов:
- * - FlowSnapshot (снапшоты потоков)
- * - FlowStepSnapshot (снапшоты шагов)
- * - ComponentSnapshot (снапшоты компонентов)
+ * Файл: packages/api/src/core/repositories/FlowSnapshotRepository.ts
  * 
- * Использует Prisma для взаимодействия с PostgreSQL базой данных.
+ * Обеспечивает доступ к данным снапшотов потоков с учетом особенностей их структуры.
+ * Поддерживает эффективные запросы для получения снапшотов со всеми связанными данными.
  */
 
-import { PrismaClient } from '@prisma/client'
-import { FlowSnapshot } from '../entities/FlowSnapshot'
-import { FlowStepSnapshot } from '../entities/FlowStepSnapshot'
-import { ComponentSnapshot } from '../entities/ComponentSnapshot'
+import { FlowSnapshot, FlowSnapshotProps } from '../entities/FlowSnapshot'
 import { BaseRepository } from './base/BaseRepository'
-import { logger } from '../../utils/logger'
 
-// ===== ИНТЕРФЕЙСЫ =====
+// ===== ИНТЕРФЕЙСЫ ДЛЯ ПОИСКА И ФИЛЬТРАЦИИ =====
 
-export interface IFlowSnapshotRepository {
-  // FlowSnapshot операции
-  findById(id: string): Promise<FlowSnapshot | null>
-  findByAssignmentId(assignmentId: string): Promise<FlowSnapshot | null>
-  createFlowSnapshot(snapshot: FlowSnapshot): Promise<FlowSnapshot>
-  updateFlowSnapshot(id: string, updates: Partial<FlowSnapshot>): Promise<FlowSnapshot>
-  deleteFlowSnapshot(id: string): Promise<void>
-  
-  // FlowStepSnapshot операции
-  findStepById(id: string): Promise<FlowStepSnapshot | null>
-  findStepsByFlowSnapshotId(flowSnapshotId: string): Promise<FlowStepSnapshot[]>
-  createStepSnapshot(snapshot: FlowStepSnapshot): Promise<FlowStepSnapshot>
-  updateStepSnapshot(id: string, updates: Partial<FlowStepSnapshot>): Promise<FlowStepSnapshot>
-  deleteStepSnapshot(id: string): Promise<void>
-  
-  // ComponentSnapshot операции
-  findComponentById(id: string): Promise<ComponentSnapshot | null>
-  findComponentsByStepSnapshotId(stepSnapshotId: string): Promise<ComponentSnapshot[]>
-  findComponentsByStepSnapshotIds(stepSnapshotIds: string[]): Promise<ComponentSnapshot[]>
-  createComponentSnapshot(snapshot: ComponentSnapshot): Promise<ComponentSnapshot>
-  updateComponentSnapshot(id: string, updates: Partial<ComponentSnapshot>): Promise<ComponentSnapshot>
-  deleteComponentSnapshot(id: string): Promise<void>
-  
-  // Пакетные операции
-  findFullSnapshotStructure(flowSnapshotId: string): Promise<{
-    flowSnapshot: FlowSnapshot
-    stepSnapshots: FlowStepSnapshot[]
-    componentSnapshots: ComponentSnapshot[]
-  } | null>
-  
-  // Статистика и аналитика
-  getSnapshotStats(assignmentId: string): Promise<{
-    totalSteps: number
-    totalComponents: number
-    createdAt: Date
-    sizeInBytes: number
-  }>
+export interface FlowSnapshotFilters {
+  /** Фильтр по назначению */
+  assignmentId?: string
+  /** Фильтр по создателю */
+  createdBy?: string
+  /** Фильтр по оригинальному потоку */
+  originalFlowId?: string
+  /** Фильтр по диапазону размеров (в байтах) */
+  sizeRange?: {
+    min?: number
+    max?: number
+  }
+  /** Фильтр по дате создания */
+  createdDateRange?: {
+    from?: Date
+    to?: Date
+  }
+  /** Фильтр по версии снапшота */
+  snapshotVersion?: string
+  /** Фильтр по количеству шагов */
+  stepCountRange?: {
+    min?: number
+    max?: number
+  }
+  /** Фильтр по количеству компонентов */
+  componentCountRange?: {
+    min?: number
+    max?: number
+  }
 }
 
-// ===== ОСНОВНОЙ КЛАСС РЕПОЗИТОРИЯ =====
-
-export class FlowSnapshotRepository extends BaseRepository implements IFlowSnapshotRepository {
-  constructor(prisma: PrismaClient) {
-    super(prisma)
+export interface FlowSnapshotSearchOptions {
+  /** Включить связанные шаги */
+  includeSteps?: boolean
+  /** Включить связанные компоненты */
+  includeComponents?: boolean
+  /** Включить метаданные оригинального потока */
+  includeOriginalFlow?: boolean
+  /** Пагинация */
+  pagination?: {
+    limit: number
+    offset: number
   }
+  /** Сортировка */
+  sorting?: {
+    field: 'createdAt' | 'updatedAt' | 'size' | 'stepCount' | 'componentCount'
+    direction: 'ASC' | 'DESC'
+  }
+}
 
-  // ===== FLOWSNAPSHOT ОПЕРАЦИИ =====
+export interface FlowSnapshotWithRelations {
+  snapshot: FlowSnapshot
+  stepSnapshots?: any[] // FlowStepSnapshot[]
+  componentSnapshots?: any[] // ComponentSnapshot[]
+  originalFlow?: any
+  assignment?: any
+}
+
+// ===== ОСНОВНОЙ ИНТЕРФЕЙС РЕПОЗИТОРИЯ =====
+
+export interface IFlowSnapshotRepository extends BaseRepository<FlowSnapshot> {
+  
+  // ===== ОСНОВНЫЕ CRUD ОПЕРАЦИИ =====
+  
+  /**
+   * Находит снапшот по ID с возможностью включения связанных данных
+   */
+  findByIdWithRelations(
+    id: string, 
+    options?: FlowSnapshotSearchOptions
+  ): Promise<FlowSnapshotWithRelations | null>
 
   /**
-   * Находит снапшот потока по ID
+   * Находит снапшот по ID назначения
    */
+  findByAssignmentId(assignmentId: string): Promise<FlowSnapshot | null>
+
+  /**
+   * Находит все снапшоты для пользователя
+   */
+  findByUserId(
+    userId: string, 
+    options?: FlowSnapshotSearchOptions
+  ): Promise<FlowSnapshotWithRelations[]>
+
+  /**
+   * Находит снапшоты с фильтрацией
+   */
+  findByFilters(
+    filters: FlowSnapshotFilters,
+    options?: FlowSnapshotSearchOptions
+  ): Promise<FlowSnapshotWithRelations[]>
+
+  // ===== СПЕЦИАЛЬНЫЕ МЕТОДЫ ДЛЯ СНАПШОТОВ =====
+
+  /**
+   * Создает полный снапшот с транзакционным сохранением
+   */
+  createWithStepsAndComponents(
+    snapshot: FlowSnapshot,
+    stepSnapshots: any[], // FlowStepSnapshot[]
+    componentSnapshots: any[] // ComponentSnapshot[]
+  ): Promise<FlowSnapshot>
+
+  /**
+   * Проверяет целостность снапшота
+   */
+  validateSnapshotIntegrity(snapshotId: string): Promise<{
+    isValid: boolean
+    issues: string[]
+    suggestions: string[]
+  }>
+
+  /**
+   * Получает статистику по снапшотам
+   */
+  getSnapshotStatistics(filters?: FlowSnapshotFilters): Promise<{
+    totalSnapshots: number
+    totalSizeBytes: number
+    averageSizeBytes: number
+    averageStepCount: number
+    averageComponentCount: number
+    oldestSnapshot: Date | null
+    newestSnapshot: Date | null
+    snapshotsByVersion: Record<string, number>
+  }>
+
+  // ===== ОПЕРАЦИИ ДЛЯ ОЧИСТКИ И АРХИВИРОВАНИЯ =====
+
+  /**
+   * Находит старые или неиспользуемые снапшоты для архивирования
+   */
+  findSnapshotsForArchival(criteria: {
+    olderThanDays: number
+    unusedForDays?: number
+    excludeActiveAssignments?: boolean
+  }): Promise<FlowSnapshot[]>
+
+  /**
+   * Вычисляет размер снапшота в базе данных
+   */
+  calculateSnapshotSize(snapshotId: string): Promise<{
+    totalSizeBytes: number
+    snapshotSizeBytes: number
+    stepsSizeBytes: number
+    componentsSizeBytes: number
+  }>
+
+  // ===== МЕТОДЫ ДЛЯ ПРОИЗВОДИТЕЛЬНОСТИ =====
+
+  /**
+   * Предзагружает данные для множества снапшотов
+   */
+  preloadSnapshotsData(
+    snapshotIds: string[],
+    options?: FlowSnapshotSearchOptions
+  ): Promise<Map<string, FlowSnapshotWithRelations>>
+
+  /**
+   * Получает базовую информацию о снапшотах без загрузки полного содержимого
+   */
+  getSnapshotsSummary(
+    snapshotIds: string[]
+  ): Promise<Array<{
+    id: string
+    assignmentId: string
+    originalFlowId: string
+    stepCount: number
+    componentCount: number
+    sizeBytes: number
+    createdAt: Date
+  }>>
+}
+
+// ===== РЕАЛИЗАЦИЯ РЕПОЗИТОРИЯ =====
+
+export class FlowSnapshotRepository implements IFlowSnapshotRepository {
+  
+  constructor(
+    private readonly prisma: any, // PrismaClient
+    private readonly logger: any
+  ) {}
+
+  // ===== БАЗОВЫЕ CRUD ОПЕРАЦИИ =====
+
+  async create(snapshot: FlowSnapshot): Promise<FlowSnapshot> {
+    try {
+      this.logger.debug('Создание снапшота потока', { snapshotId: snapshot.id })
+
+      const data = this.mapToDatabase(snapshot)
+      const created = await this.prisma.flowSnapshot.create({ data })
+      
+      this.logger.info('Снапшот потока создан', { 
+        snapshotId: snapshot.id,
+        assignmentId: snapshot.assignmentId 
+      })
+
+      return this.mapToDomain(created)
+    } catch (error) {
+      this.logger.error('Ошибка создания снапшота потока', error, { snapshotId: snapshot.id })
+      throw error
+    }
+  }
+
   async findById(id: string): Promise<FlowSnapshot | null> {
     try {
-      const record = await this.prisma.flowSnapshot.findUnique({
+      const snapshot = await this.prisma.flowSnapshot.findUnique({
+        where: { id }
+      })
+
+      return snapshot ? this.mapToDomain(snapshot) : null
+    } catch (error) {
+      this.logger.error('Ошибка поиска снапшота по ID', error, { snapshotId: id })
+      throw error
+    }
+  }
+
+  async update(id: string, snapshot: FlowSnapshot): Promise<FlowSnapshot> {
+    try {
+      this.logger.debug('Обновление снапшота потока', { snapshotId: id })
+
+      const data = this.mapToDatabase(snapshot)
+      const updated = await this.prisma.flowSnapshot.update({
         where: { id },
-        include: {
-          assignment: {
-            select: { id: true, userId: true }
+        data
+      })
+
+      this.logger.info('Снапшот потока обновлен', { snapshotId: id })
+      return this.mapToDomain(updated)
+    } catch (error) {
+      this.logger.error('Ошибка обновления снапшота', error, { snapshotId: id })
+      throw error
+    }
+  }
+
+  async delete(id: string): Promise<void> {
+    try {
+      this.logger.debug('Удаление снапшота потока', { snapshotId: id })
+
+      // В транзакции удаляем снапшот со всеми связанными данными
+      await this.prisma.$transaction(async (tx: any) => {
+        // Сначала удаляем компоненты
+        await tx.componentSnapshot.deleteMany({
+          where: {
+            stepSnapshot: {
+              flowSnapshotId: id
+            }
           }
-        }
-      })
-
-      if (!record) {
-        return null
-      }
-
-      return this.mapToFlowSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при поиске снапшота потока по ID', { id, error: error.message })
-      throw new Error(`Не удалось найти снапшот потока: ${error.message}`)
-    }
-  }
-
-  /**
-   * Находит снапшот потока по ID назначения
-   */
-  async findByAssignmentId(assignmentId: string): Promise<FlowSnapshot | null> {
-    try {
-      const record = await this.prisma.flowSnapshot.findFirst({
-        where: { assignmentId },
-        include: {
-          assignment: {
-            select: { id: true, userId: true }
-          }
-        }
-      })
-
-      if (!record) {
-        return null
-      }
-
-      return this.mapToFlowSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при поиске снапшота по assignmentId', { assignmentId, error: error.message })
-      throw new Error(`Не удалось найти снапшот: ${error.message}`)
-    }
-  }
-
-  /**
-   * Создает новый снапшот потока
-   */
-  async createFlowSnapshot(snapshot: FlowSnapshot): Promise<FlowSnapshot> {
-    try {
-      const data = snapshot.toData()
-      
-      const record = await this.prisma.flowSnapshot.create({
-        data: {
-          id: data.id,
-          assignmentId: data.assignmentId,
-          originalFlowId: data.originalFlowId,
-          title: data.flowMeta.title,
-          description: data.flowMeta.description,
-          version: data.flowMeta.version,
-          estimatedDuration: data.flowMeta.estimatedDuration,
-          difficulty: data.flowMeta.difficulty,
-          tags: data.flowMeta.tags,
-          stepSnapshotIds: data.stepSnapshotIds,
-          snapshotVersion: data.snapshotMeta.snapshotVersion,
-          createdBy: data.snapshotMeta.createdBy,
-          createdAt: data.snapshotMeta.createdAt,
-          context: data.snapshotMeta.context || {}
-        }
-      })
-
-      logger.info('Снапшот потока создан', { flowSnapshotId: record.id })
-      return this.mapToFlowSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при создании снапшота потока', { snapshotId: snapshot.id, error: error.message })
-      throw new Error(`Не удалось создать снапшот потока: ${error.message}`)
-    }
-  }
-
-  /**
-   * Обновляет снапшот потока
-   */
-  async updateFlowSnapshot(id: string, updates: Partial<FlowSnapshot>): Promise<FlowSnapshot> {
-    try {
-      // Снапшоты по определению неизменяемы, поэтому обновления должны быть ограничены
-      // Разрешаем обновлять только контекст
-      const record = await this.prisma.flowSnapshot.update({
-        where: { id },
-        data: {
-          // Здесь можно добавить разрешенные для обновления поля
-          context: (updates as any).context
-        }
-      })
-
-      return this.mapToFlowSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при обновлении снапшота потока', { id, error: error.message })
-      throw new Error(`Не удалось обновить снапшот потока: ${error.message}`)
-    }
-  }
-
-  /**
-   * Удаляет снапшот потока и все связанные данные
-   */
-  async deleteFlowSnapshot(id: string): Promise<void> {
-    try {
-      // Удаляем в правильном порядке: сначала компоненты, потом шаги, потом поток
-      await this.prisma.$transaction(async (tx) => {
-        // Сначала находим все связанные шаги
-        const stepSnapshots = await tx.flowStepSnapshot.findMany({
-          where: { flowSnapshotId: id },
-          select: { id: true }
         })
 
-        const stepSnapshotIds = stepSnapshots.map(step => step.id)
-
-        // Удаляем все компоненты
-        if (stepSnapshotIds.length > 0) {
-          await tx.componentSnapshot.deleteMany({
-            where: { stepSnapshotId: { in: stepSnapshotIds } }
-          })
-        }
-
-        // Удаляем все шаги
+        // Затем удаляем шаги
         await tx.flowStepSnapshot.deleteMany({
           where: { flowSnapshotId: id }
         })
 
-        // Удаляем сам снапшот потока
+        // Наконец удаляем сам снапшот
         await tx.flowSnapshot.delete({
           where: { id }
         })
       })
 
-      logger.info('Снапшот потока удален', { flowSnapshotId: id })
+      this.logger.info('Снапшот потока удален', { snapshotId: id })
     } catch (error) {
-      logger.error('Ошибка при удалении снапшота потока', { id, error: error.message })
-      throw new Error(`Не удалось удалить снапшот потока: ${error.message}`)
+      this.logger.error('Ошибка удаления снапшота', error, { snapshotId: id })
+      throw error
     }
   }
 
-  // ===== FLOWSTEPSNAPSHOT ОПЕРАЦИИ =====
-
-  /**
-   * Находит снапшот шага по ID
-   */
-  async findStepById(id: string): Promise<FlowStepSnapshot | null> {
+  async findAll(): Promise<FlowSnapshot[]> {
     try {
-      const record = await this.prisma.flowStepSnapshot.findUnique({
-        where: { id }
+      const snapshots = await this.prisma.flowSnapshot.findMany({
+        orderBy: { createdAt: 'desc' }
       })
 
-      if (!record) {
-        return null
+      return snapshots.map(this.mapToDomain)
+    } catch (error) {
+      this.logger.error('Ошибка получения всех снапшотов', error)
+      throw error
+    }
+  }
+
+  // ===== СПЕЦИАЛИЗИРОВАННЫЕ МЕТОДЫ =====
+
+  async findByIdWithRelations(
+    id: string, 
+    options: FlowSnapshotSearchOptions = {}
+  ): Promise<FlowSnapshotWithRelations | null> {
+    try {
+      const include: any = {}
+
+      if (options.includeSteps) {
+        include.stepSnapshots = {
+          orderBy: { originalOrder: 'asc' },
+          ...(options.includeComponents && {
+            include: {
+              componentSnapshots: {
+                orderBy: { originalOrder: 'asc' }
+              }
+            }
+          })
+        }
       }
 
-      return this.mapToStepSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при поиске снапшота шага', { id, error: error.message })
-      throw new Error(`Не удалось найти снапшот шага: ${error.message}`)
-    }
-  }
-
-  /**
-   * Находит все снапшоты шагов для снапшота потока
-   */
-  async findStepsByFlowSnapshotId(flowSnapshotId: string): Promise<FlowStepSnapshot[]> {
-    try {
-      const records = await this.prisma.flowStepSnapshot.findMany({
-        where: { flowSnapshotId },
-        orderBy: { order: 'asc' }
-      })
-
-      return records.map(record => this.mapToStepSnapshotEntity(record))
-    } catch (error) {
-      logger.error('Ошибка при поиске снапшотов шагов', { flowSnapshotId, error: error.message })
-      throw new Error(`Не удалось найти снапшоты шагов: ${error.message}`)
-    }
-  }
-
-  /**
-   * Создает новый снапшот шага
-   */
-  async createStepSnapshot(snapshot: FlowStepSnapshot): Promise<FlowStepSnapshot> {
-    try {
-      const data = snapshot.toData()
-      
-      const record = await this.prisma.flowStepSnapshot.create({
-        data: {
-          id: data.id,
-          flowSnapshotId: data.flowSnapshotId,
-          originalStepId: data.originalStepId,
-          title: data.stepMeta.title,
-          description: data.stepMeta.description,
-          order: data.stepMeta.order,
-          estimatedDuration: data.stepMeta.estimatedDuration,
-          icon: data.stepMeta.icon,
-          themeColor: data.stepMeta.themeColor,
-          componentSnapshotIds: data.componentSnapshotIds,
-          unlockConditions: data.unlockConditions,
-          completionRequirements: data.completionRequirements,
-          snapshotVersion: data.snapshotMeta.snapshotVersion,
-          createdBy: data.snapshotMeta.createdBy,
-          createdAt: data.snapshotMeta.createdAt,
-          context: data.snapshotMeta.context || {}
+      if (options.includeOriginalFlow) {
+        include.assignment = {
+          include: {
+            flow: true
+          }
         }
-      })
+      }
 
-      return this.mapToStepSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при создании снапшота шага', { stepId: snapshot.id, error: error.message })
-      throw new Error(`Не удалось создать снапшот шага: ${error.message}`)
-    }
-  }
-
-  /**
-   * Обновляет снапшот шага (ограниченно)
-   */
-  async updateStepSnapshot(id: string, updates: Partial<FlowStepSnapshot>): Promise<FlowStepSnapshot> {
-    try {
-      const record = await this.prisma.flowStepSnapshot.update({
+      const snapshot = await this.prisma.flowSnapshot.findUnique({
         where: { id },
-        data: {
-          context: (updates as any).context
-        }
+        include
       })
 
-      return this.mapToStepSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при обновлении снапшота шага', { id, error: error.message })
-      throw new Error(`Не удалось обновить снапшот шага: ${error.message}`)
-    }
-  }
-
-  /**
-   * Удаляет снапшот шага
-   */
-  async deleteStepSnapshot(id: string): Promise<void> {
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        // Сначала удаляем все компоненты шага
-        await tx.componentSnapshot.deleteMany({
-          where: { stepSnapshotId: id }
-        })
-
-        // Затем удаляем сам шаг
-        await tx.flowStepSnapshot.delete({
-          where: { id }
-        })
-      })
-    } catch (error) {
-      logger.error('Ошибка при удалении снапшота шага', { id, error: error.message })
-      throw new Error(`Не удалось удалить снапшот шага: ${error.message}`)
-    }
-  }
-
-  // ===== COMPONENTSNAPSHOT ОПЕРАЦИИ =====
-
-  /**
-   * Находит снапшот компонента по ID
-   */
-  async findComponentById(id: string): Promise<ComponentSnapshot | null> {
-    try {
-      const record = await this.prisma.componentSnapshot.findUnique({
-        where: { id }
-      })
-
-      if (!record) {
-        return null
-      }
-
-      return this.mapToComponentSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при поиске снапшота компонента', { id, error: error.message })
-      throw new Error(`Не удалось найти снапшот компонента: ${error.message}`)
-    }
-  }
-
-  /**
-   * Находит все снапшоты компонентов для снапшота шага
-   */
-  async findComponentsByStepSnapshotId(stepSnapshotId: string): Promise<ComponentSnapshot[]> {
-    try {
-      const records = await this.prisma.componentSnapshot.findMany({
-        where: { stepSnapshotId },
-        orderBy: { order: 'asc' }
-      })
-
-      return records.map(record => this.mapToComponentSnapshotEntity(record))
-    } catch (error) {
-      logger.error('Ошибка при поиске снапшотов компонентов для шага', { stepSnapshotId, error: error.message })
-      throw new Error(`Не удалось найти снапшоты компонентов: ${error.message}`)
-    }
-  }
-
-  /**
-   * Находит все снапшоты компонентов для множества снапшотов шагов
-   */
-  async findComponentsByStepSnapshotIds(stepSnapshotIds: string[]): Promise<ComponentSnapshot[]> {
-    try {
-      const records = await this.prisma.componentSnapshot.findMany({
-        where: { stepSnapshotId: { in: stepSnapshotIds } },
-        orderBy: [
-          { stepSnapshotId: 'asc' },
-          { order: 'asc' }
-        ]
-      })
-
-      return records.map(record => this.mapToComponentSnapshotEntity(record))
-    } catch (error) {
-      logger.error('Ошибка при поиске снапшотов компонентов', { stepSnapshotIds, error: error.message })
-      throw new Error(`Не удалось найти снапшоты компонентов: ${error.message}`)
-    }
-  }
-
-  /**
-   * Создает новый снапшот компонента
-   */
-  async createComponentSnapshot(snapshot: ComponentSnapshot): Promise<ComponentSnapshot> {
-    try {
-      const data = snapshot.toData()
-      
-      const record = await this.prisma.componentSnapshot.create({
-        data: {
-          id: data.id,
-          stepSnapshotId: data.stepSnapshotId,
-          originalComponentId: data.originalComponentId,
-          type: data.type,
-          typeVersion: data.typeVersion,
-          order: data.order,
-          isRequired: data.isRequired,
-          data: data.data, // JSON поле с содержимым компонента
-          snapshotVersion: data.snapshotMeta.snapshotVersion,
-          createdBy: data.snapshotMeta.createdBy,
-          createdAt: data.snapshotMeta.createdAt,
-          context: data.snapshotMeta.context || {}
-        }
-      })
-
-      return this.mapToComponentSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при создании снапшота компонента', { componentId: snapshot.id, error: error.message })
-      throw new Error(`Не удалось создать снапшот компонента: ${error.message}`)
-    }
-  }
-
-  /**
-   * Обновляет снапшот компонента (ограниченно)
-   */
-  async updateComponentSnapshot(id: string, updates: Partial<ComponentSnapshot>): Promise<ComponentSnapshot> {
-    try {
-      const record = await this.prisma.componentSnapshot.update({
-        where: { id },
-        data: {
-          context: (updates as any).context
-        }
-      })
-
-      return this.mapToComponentSnapshotEntity(record)
-    } catch (error) {
-      logger.error('Ошибка при обновлении снапшота компонента', { id, error: error.message })
-      throw new Error(`Не удалось обновить снапшот компонента: ${error.message}`)
-    }
-  }
-
-  /**
-   * Удаляет снапшот компонента
-   */
-  async deleteComponentSnapshot(id: string): Promise<void> {
-    try {
-      await this.prisma.componentSnapshot.delete({
-        where: { id }
-      })
-    } catch (error) {
-      logger.error('Ошибка при удалении снапшота компонента', { id, error: error.message })
-      throw new Error(`Не удалось удалить снапшот компонента: ${error.message}`)
-    }
-  }
-
-  // ===== КОМПЛЕКСНЫЕ ОПЕРАЦИИ =====
-
-  /**
-   * Получает полную структуру снапшота (поток + шаги + компоненты)
-   */
-  async findFullSnapshotStructure(flowSnapshotId: string): Promise<{
-    flowSnapshot: FlowSnapshot
-    stepSnapshots: FlowStepSnapshot[]
-    componentSnapshots: ComponentSnapshot[]
-  } | null> {
-    try {
-      const flowSnapshot = await this.findById(flowSnapshotId)
-      if (!flowSnapshot) {
-        return null
-      }
-
-      const stepSnapshots = await this.findStepsByFlowSnapshotId(flowSnapshotId)
-      const stepSnapshotIds = stepSnapshots.map(step => step.id)
-      const componentSnapshots = await this.findComponentsByStepSnapshotIds(stepSnapshotIds)
+      if (!snapshot) return null
 
       return {
-        flowSnapshot,
-        stepSnapshots,
-        componentSnapshots
+        snapshot: this.mapToDomain(snapshot),
+        stepSnapshots: snapshot.stepSnapshots || [],
+        componentSnapshots: options.includeComponents 
+          ? snapshot.stepSnapshots?.flatMap((step: any) => step.componentSnapshots || []) || []
+          : undefined,
+        originalFlow: snapshot.assignment?.flow,
+        assignment: snapshot.assignment
       }
     } catch (error) {
-      logger.error('Ошибка при получении полной структуры снапшота', { flowSnapshotId, error: error.message })
-      throw new Error(`Не удалось получить структуру снапшота: ${error.message}`)
+      this.logger.error('Ошибка поиска снапшота с связями', error, { snapshotId: id })
+      throw error
     }
   }
 
-  /**
-   * Получает статистику снапшота
-   */
-  async getSnapshotStats(assignmentId: string): Promise<{
-    totalSteps: number
-    totalComponents: number
-    createdAt: Date
-    sizeInBytes: number
+  async findByAssignmentId(assignmentId: string): Promise<FlowSnapshot | null> {
+    try {
+      const snapshot = await this.prisma.flowSnapshot.findUnique({
+        where: { assignmentId }
+      })
+
+      return snapshot ? this.mapToDomain(snapshot) : null
+    } catch (error) {
+      this.logger.error('Ошибка поиска снапшота по назначению', error, { assignmentId })
+      throw error
+    }
+  }
+
+  async findByUserId(
+    userId: string, 
+    options: FlowSnapshotSearchOptions = {}
+  ): Promise<FlowSnapshotWithRelations[]> {
+    try {
+      const include: any = {}
+
+      if (options.includeSteps) {
+        include.stepSnapshots = {
+          orderBy: { originalOrder: 'asc' }
+        }
+      }
+
+      const snapshots = await this.prisma.flowSnapshot.findMany({
+        where: {
+          assignment: {
+            userId
+          }
+        },
+        include: {
+          assignment: true,
+          ...include
+        },
+        ...(options.pagination && {
+          skip: options.pagination.offset,
+          take: options.pagination.limit
+        }),
+        ...(options.sorting && {
+          orderBy: this.buildOrderBy(options.sorting)
+        })
+      })
+
+      return snapshots.map((snapshot: any) => ({
+        snapshot: this.mapToDomain(snapshot),
+        stepSnapshots: snapshot.stepSnapshots,
+        assignment: snapshot.assignment
+      }))
+    } catch (error) {
+      this.logger.error('Ошибка поиска снапшотов пользователя', error, { userId })
+      throw error
+    }
+  }
+
+  async createWithStepsAndComponents(
+    snapshot: FlowSnapshot,
+    stepSnapshots: any[],
+    componentSnapshots: any[]
+  ): Promise<FlowSnapshot> {
+    try {
+      this.logger.debug('Создание полного снапшота с шагами и компонентами', {
+        snapshotId: snapshot.id,
+        stepsCount: stepSnapshots.length,
+        componentsCount: componentSnapshots.length
+      })
+
+      const result = await this.prisma.$transaction(async (tx: any) => {
+        // 1. Создаем основной снапшот
+        const snapshotData = this.mapToDatabase(snapshot)
+        const createdSnapshot = await tx.flowSnapshot.create({ data: snapshotData })
+
+        // 2. Создаем снапшоты шагов
+        const stepSnapshotData = stepSnapshots.map(step => ({
+          ...step,
+          flowSnapshotId: snapshot.id
+        }))
+        
+        await tx.flowStepSnapshot.createMany({
+          data: stepSnapshotData
+        })
+
+        // 3. Создаем снапшоты компонентов
+        const componentSnapshotData = componentSnapshots.map(component => ({
+          ...component
+        }))
+        
+        await tx.componentSnapshot.createMany({
+          data: componentSnapshotData
+        })
+
+        return createdSnapshot
+      })
+
+      this.logger.info('Полный снапшот создан успешно', {
+        snapshotId: snapshot.id,
+        stepsCount: stepSnapshots.length,
+        componentsCount: componentSnapshots.length
+      })
+
+      return this.mapToDomain(result)
+    } catch (error) {
+      this.logger.error('Ошибка создания полного снапшота', error, {
+        snapshotId: snapshot.id
+      })
+      throw error
+    }
+  }
+
+  async validateSnapshotIntegrity(snapshotId: string): Promise<{
+    isValid: boolean
+    issues: string[]
+    suggestions: string[]
   }> {
     try {
-      const flowSnapshot = await this.findByAssignmentId(assignmentId)
-      if (!flowSnapshot) {
-        throw new Error('Снапшот не найден')
+      const issues: string[] = []
+      const suggestions: string[] = []
+
+      // Получаем снапшот с полными данными
+      const snapshotData = await this.findByIdWithRelations(snapshotId, {
+        includeSteps: true,
+        includeComponents: true
+      })
+
+      if (!snapshotData) {
+        issues.push('Снапшот не найден')
+        return { isValid: false, issues, suggestions }
       }
 
-      const stepSnapshots = await this.findStepsByFlowSnapshotId(flowSnapshot.id)
-      const stepSnapshotIds = stepSnapshots.map(step => step.id)
-      const componentSnapshots = await this.findComponentsByStepSnapshotIds(stepSnapshotIds)
+      const { snapshot, stepSnapshots, componentSnapshots } = snapshotData
 
-      // Приблизительный расчет размера
-      const sizeInBytes = JSON.stringify({
-        flowSnapshot: flowSnapshot.toData(),
-        stepSnapshots: stepSnapshots.map(s => s.toData()),
-        componentSnapshots: componentSnapshots.map(c => c.toData())
-      }).length
+      // Проверяем соответствие количества шагов
+      if (snapshot.metadata.totalSteps !== (stepSnapshots?.length || 0)) {
+        issues.push(`Количество шагов в метаданных (${snapshot.metadata.totalSteps}) не соответствует фактическому (${stepSnapshots?.length || 0})`)
+        suggestions.push('Обновите метаданные снапшота')
+      }
+
+      // Проверяем соответствие количества компонентов
+      if (snapshot.metadata.totalComponents !== (componentSnapshots?.length || 0)) {
+        issues.push(`Количество компонентов в метаданных (${snapshot.metadata.totalComponents}) не соответствует фактическому (${componentSnapshots?.length || 0})`)
+        suggestions.push('Обновите метаданные снапшота')
+      }
+
+      // Проверяем связи между шагами и компонентами
+      const stepIds = stepSnapshots?.map(step => step.id) || []
+      const orphanedComponents = componentSnapshots?.filter(comp => 
+        !stepIds.includes(comp.stepSnapshotId)
+      ) || []
+
+      if (orphanedComponents.length > 0) {
+        issues.push(`Найдено ${orphanedComponents.length} компонентов без связанных шагов`)
+        suggestions.push('Удалите или переназначьте осиротевшие компоненты')
+      }
+
+      // Проверяем хеш содержимого (если реализована проверка хешей)
+      // TODO: Реализовать проверку contentHash
 
       return {
-        totalSteps: stepSnapshots.length,
-        totalComponents: componentSnapshots.length,
-        createdAt: flowSnapshot.createdAt,
-        sizeInBytes
+        isValid: issues.length === 0,
+        issues,
+        suggestions
       }
     } catch (error) {
-      logger.error('Ошибка при получении статистики снапшота', { assignmentId, error: error.message })
-      throw new Error(`Не удалось получить статистику: ${error.message}`)
+      this.logger.error('Ошибка валидации целостности снапшота', error, { snapshotId })
+      throw error
     }
   }
 
-  // ===== ПРИВАТНЫЕ МЕТОДЫ МАППИНГА =====
+  async getSnapshotStatistics(filters: FlowSnapshotFilters = {}): Promise<{
+    totalSnapshots: number
+    totalSizeBytes: number
+    averageSizeBytes: number
+    averageStepCount: number
+    averageComponentCount: number
+    oldestSnapshot: Date | null
+    newestSnapshot: Date | null
+    snapshotsByVersion: Record<string, number>
+  }> {
+    try {
+      const where = this.buildWhereClause(filters)
 
-  private mapToFlowSnapshotEntity(record: any): FlowSnapshot {
-    return FlowSnapshot.fromData({
-      id: record.id,
-      assignmentId: record.assignmentId,
-      originalFlowId: record.originalFlowId,
-      flowMeta: {
-        title: record.title,
-        description: record.description,
-        version: record.version,
-        estimatedDuration: record.estimatedDuration,
-        difficulty: record.difficulty,
-        tags: record.tags || []
-      },
-      stepSnapshotIds: record.stepSnapshotIds || [],
-      snapshotMeta: {
-        createdAt: record.createdAt,
-        createdBy: record.createdBy,
-        snapshotVersion: record.snapshotVersion,
-        context: record.context
+      const stats = await this.prisma.flowSnapshot.aggregate({
+        where,
+        _count: { id: true },
+        _sum: { 
+          sizeBytes: true,
+          totalSteps: true,
+          totalComponents: true
+        },
+        _avg: {
+          sizeBytes: true,
+          totalSteps: true,
+          totalComponents: true
+        },
+        _min: { createdAt: true },
+        _max: { createdAt: true }
+      })
+
+      // Получаем статистику по версиям
+      const versionStats = await this.prisma.flowSnapshot.groupBy({
+        where,
+        by: ['snapshotVersion'],
+        _count: { snapshotVersion: true }
+      })
+
+      const snapshotsByVersion = versionStats.reduce((acc: Record<string, number>, item: any) => {
+        acc[item.snapshotVersion] = item._count.snapshotVersion
+        return acc
+      }, {})
+
+      return {
+        totalSnapshots: stats._count.id,
+        totalSizeBytes: stats._sum.sizeBytes || 0,
+        averageSizeBytes: stats._avg.sizeBytes || 0,
+        averageStepCount: stats._avg.totalSteps || 0,
+        averageComponentCount: stats._avg.totalComponents || 0,
+        oldestSnapshot: stats._min.createdAt,
+        newestSnapshot: stats._max.createdAt,
+        snapshotsByVersion
       }
-    })
+    } catch (error) {
+      this.logger.error('Ошибка получения статистики снапшотов', error)
+      throw error
+    }
   }
 
-  private mapToStepSnapshotEntity(record: any): FlowStepSnapshot {
-    return FlowStepSnapshot.fromData({
-      id: record.id,
-      flowSnapshotId: record.flowSnapshotId,
-      originalStepId: record.originalStepId,
-      stepMeta: {
-        title: record.title,
-        description: record.description,
-        order: record.order,
-        estimatedDuration: record.estimatedDuration,
-        icon: record.icon,
-        themeColor: record.themeColor
+  // ===== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ =====
+
+  private mapToDomain(data: any): FlowSnapshot {
+    const props: FlowSnapshotProps = {
+      id: data.id,
+      assignmentId: data.assignmentId,
+      stepSnapshotIds: data.stepSnapshotIds || [],
+      originalFlowReference: {
+        originalFlowId: data.originalFlowId,
+        originalFlowVersion: data.originalFlowVersion,
+        originalFlowTitle: data.originalFlowTitle,
+        originalFlowDescription: data.originalFlowDescription
       },
-      componentSnapshotIds: record.componentSnapshotIds || [],
-      unlockConditions: record.unlockConditions || [],
-      completionRequirements: record.completionRequirements || { type: 'ALL_COMPONENTS' },
-      snapshotMeta: {
-        createdAt: record.createdAt,
-        createdBy: record.createdBy,
-        snapshotVersion: record.snapshotVersion,
-        context: record.context
-      }
-    })
+      metadata: {
+        snapshotVersion: data.snapshotVersion,
+        sizeBytes: data.sizeBytes,
+        creationTimeMs: data.creationTimeMs,
+        totalSteps: data.totalSteps,
+        totalComponents: data.totalComponents,
+        contentHash: data.contentHash
+      },
+      context: data.context,
+      createdBy: data.createdBy,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt
+    }
+
+    return new FlowSnapshot(props)
   }
 
-  private mapToComponentSnapshotEntity(record: any): ComponentSnapshot {
-    return ComponentSnapshot.fromData({
-      id: record.id,
-      stepSnapshotId: record.stepSnapshotId,
-      originalComponentId: record.originalComponentId,
-      type: record.type,
-      typeVersion: record.typeVersion,
-      order: record.order,
-      isRequired: record.isRequired,
-      data: record.data, // JSON данные компонента
-      snapshotMeta: {
-        createdAt: record.createdAt,
-        createdBy: record.createdBy,
-        snapshotVersion: record.snapshotVersion,
-        context: record.context
+  private mapToDatabase(snapshot: FlowSnapshot): any {
+    return {
+      id: snapshot.id,
+      assignmentId: snapshot.assignmentId,
+      stepSnapshotIds: snapshot.stepSnapshotIds,
+      originalFlowId: snapshot.originalFlowReference.originalFlowId,
+      originalFlowVersion: snapshot.originalFlowReference.originalFlowVersion,
+      originalFlowTitle: snapshot.originalFlowReference.originalFlowTitle,
+      originalFlowDescription: snapshot.originalFlowReference.originalFlowDescription,
+      snapshotVersion: snapshot.metadata.snapshotVersion,
+      sizeBytes: snapshot.metadata.sizeBytes,
+      creationTimeMs: snapshot.metadata.creationTimeMs,
+      totalSteps: snapshot.metadata.totalSteps,
+      totalComponents: snapshot.metadata.totalComponents,
+      contentHash: snapshot.metadata.contentHash,
+      context: snapshot.context,
+      createdBy: snapshot.createdBy,
+      createdAt: snapshot.createdAt,
+      updatedAt: snapshot.updatedAt
+    }
+  }
+
+  private buildWhereClause(filters: FlowSnapshotFilters): any {
+    const where: any = {}
+
+    if (filters.assignmentId) {
+      where.assignmentId = filters.assignmentId
+    }
+
+    if (filters.createdBy) {
+      where.createdBy = filters.createdBy
+    }
+
+    if (filters.originalFlowId) {
+      where.originalFlowId = filters.originalFlowId
+    }
+
+    if (filters.snapshotVersion) {
+      where.snapshotVersion = filters.snapshotVersion
+    }
+
+    if (filters.sizeRange) {
+      where.sizeBytes = {}
+      if (filters.sizeRange.min !== undefined) {
+        where.sizeBytes.gte = filters.sizeRange.min
       }
-    } as any)
+      if (filters.sizeRange.max !== undefined) {
+        where.sizeBytes.lte = filters.sizeRange.max
+      }
+    }
+
+    if (filters.createdDateRange) {
+      where.createdAt = {}
+      if (filters.createdDateRange.from) {
+        where.createdAt.gte = filters.createdDateRange.from
+      }
+      if (filters.createdDateRange.to) {
+        where.createdAt.lte = filters.createdDateRange.to
+      }
+    }
+
+    return where
+  }
+
+  private buildOrderBy(sorting: FlowSnapshotSearchOptions['sorting']): any {
+    if (!sorting) return { createdAt: 'desc' }
+
+    const field = sorting.field === 'size' ? 'sizeBytes' : 
+                 sorting.field === 'stepCount' ? 'totalSteps' :
+                 sorting.field === 'componentCount' ? 'totalComponents' :
+                 sorting.field
+
+    return { [field]: sorting.direction.toLowerCase() }
+  }
+
+  // TODO: Реализовать остальные методы интерфейса
+  async findByFilters(filters: FlowSnapshotFilters, options?: FlowSnapshotSearchOptions): Promise<FlowSnapshotWithRelations[]> {
+    // TODO: Реализация
+    throw new Error('Method not implemented.')
+  }
+
+  async findSnapshotsForArchival(criteria: any): Promise<FlowSnapshot[]> {
+    // TODO: Реализация  
+    throw new Error('Method not implemented.')
+  }
+
+  async calculateSnapshotSize(snapshotId: string): Promise<any> {
+    // TODO: Реализация
+    throw new Error('Method not implemented.')
+  }
+
+  async preloadSnapshotsData(snapshotIds: string[], options?: FlowSnapshotSearchOptions): Promise<Map<string, FlowSnapshotWithRelations>> {
+    // TODO: Реализация
+    throw new Error('Method not implemented.')
+  }
+
+  async getSnapshotsSummary(snapshotIds: string[]): Promise<any[]> {
+    // TODO: Реализация
+    throw new Error('Method not implemented.')
   }
 }
