@@ -1,0 +1,67 @@
+{
+    "compilerOptions": {
+      /* Базовые настройки компилятора TypeScript для API сервера */
+      "target": "ES2022",
+      "module": "CommonJS",
+      "lib": ["ES2022"],
+      "outDir": "./dist",
+      "rootDir": "./src",
+      
+      /* Строгая типизация для надежности */
+      "strict": true,
+      "noImplicitAny": true,
+      "strictNullChecks": true,
+      "strictFunctionTypes": true,
+      "noImplicitReturns": true,
+      "noImplicitThis": true,
+      "noUnusedLocals": true,
+      "noUnusedParameters": true,
+      
+      /* Модульная система */
+      "moduleResolution": "node",
+      "allowSyntheticDefaultImports": true,
+      "esModuleInterop": true,
+      "resolveJsonModule": true,
+      "isolatedModules": true,
+      
+      /* Генерация */
+      "declaration": true,
+      "declarationMap": true,
+      "sourceMap": true,
+      "removeComments": false,
+      
+      /* Поддержка экспериментальных декораторов для Prisma */
+      "experimentalDecorators": true,
+      "emitDecoratorMetadata": true,
+      
+      /* Импорты и пути */
+      "baseUrl": "./src",
+      "paths": {
+        "@/*": ["*"],
+        "@/config/*": ["config/*"],
+        "@/core/*": ["core/*"],
+        "@/schema/*": ["schema/*"],
+        "@/infrastructure/*": ["infrastructure/*"],
+        "@/utils/*": ["utils/*"],
+        "@/types/*": ["types/*"],
+        "@/middleware/*": ["middleware/*"]
+      },
+      
+      /* Совместимость */
+      "skipLibCheck": true,
+      "forceConsistentCasingInFileNames": true
+    },
+    "include": [
+      "src/**/*",
+      "tests/**/*"
+    ],
+    "exclude": [
+      "node_modules",
+      "dist",
+      "**/*.test.ts",
+      "**/*.spec.ts"
+    ],
+    "ts-node": {
+      "require": ["tsconfig-paths/register"]
+    }
+  }

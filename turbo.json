@@ -1,0 +1,77 @@
+{
+    "$schema": "https://turbo.build/schema.json",
+    "globalDependencies": [
+      "**/.env.*local",
+      "**/.env"
+    ],
+    "pipeline": {
+      "build": {
+        "dependsOn": ["^build", "codegen"],
+        "outputs": ["dist/**", "build/**", ".next/**", "!.next/cache/**"]
+      },
+      "dev": {
+        "cache": false,
+        "persistent": true,
+        "dependsOn": ["^build"]
+      },
+      "start": {
+        "dependsOn": ["build"]
+      },
+      "test": {
+        "dependsOn": ["build"],
+        "outputs": ["coverage/**"],
+        "inputs": [
+          "src/**/*.ts",
+          "src/**/*.tsx", 
+          "test/**/*.ts",
+          "tests/**/*.ts",
+          "**/*.test.ts",
+          "**/*.spec.ts"
+        ]
+      },
+      "test:watch": {
+        "cache": false,
+        "persistent": true
+      },
+      "lint": {
+        "outputs": []
+      },
+      "lint:fix": {
+        "cache": false,
+        "outputs": []
+      },
+      "type-check": {
+        "dependsOn": ["^build", "codegen"],
+        "outputs": []
+      },
+      "clean": {
+        "cache": false
+      },
+      "codegen": {
+        "dependsOn": ["^build"],
+        "outputs": ["src/generated/**", "generated/**"]
+      },
+      "migrate": {
+        "cache": false
+      },
+      "seed": {
+        "cache": false
+      },
+      "reset": {
+        "cache": false
+      },
+      "studio": {
+        "cache": false,
+        "persistent": true
+      }
+    },
+    "globalEnv": [
+      "NODE_ENV",
+      "PORT",
+      "DATABASE_URL",
+      "REDIS_URL",
+      "JWT_SECRET",
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_WEBHOOK_SECRET"
+    ]
+  }
