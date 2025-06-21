@@ -1,0 +1,2945 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuddyBot GraphQL API - Документация</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            background: #fff;
+            border-right: 1px solid #e0e0e0;
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            overflow-y: auto;
+            z-index: 100;
+        }
+        
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid #e0e0e0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .sidebar-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        .sidebar-header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .nav-section {
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .nav-section-title {
+            padding: 16px 24px 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #0066ff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.2s;
+        }
+        
+        .nav-section-title:hover {
+            background: #f8f9fa;
+        }
+        
+        .nav-section-title .arrow {
+            transition: transform 0.2s;
+            font-size: 12px;
+        }
+        
+        .nav-section.collapsed .arrow {
+            transform: rotate(-90deg);
+        }
+        
+        .nav-section.collapsed .nav-subsection {
+            display: none;
+        }
+        
+        .nav-item {
+            display: block;
+            padding: 8px 24px 8px 40px;
+            color: #666;
+            text-decoration: none;
+            font-size: 13px;
+            transition: all 0.2s;
+            position: relative;
+            border-left: 3px solid transparent;
+        }
+        
+        .nav-item:hover {
+            background: #f8f9fa;
+            color: #0066ff;
+        }
+        
+        .nav-item.active {
+            background: #e8f0ff;
+            color: #0066ff;
+            font-weight: 500;
+            border-left-color: #0066ff;
+        }
+        
+        .nav-subsection {
+            padding-bottom: 12px;
+        }
+        
+        /* Main Content */
+        .main {
+            flex: 1;
+            margin-left: 320px;
+            background: #fff;
+            min-height: 100vh;
+        }
+        
+        .content {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+        
+        /* Typography */
+        h2 {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            color: #111;
+            padding-top: 40px;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        h2:first-child {
+            border-top: none;
+            padding-top: 0;
+        }
+        
+        h3 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 32px 0 16px;
+            color: #222;
+        }
+        
+        h4 {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 24px 0 12px;
+            color: #333;
+        }
+        
+        h5 {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 20px 0 8px;
+            color: #444;
+        }
+        
+        p {
+            margin-bottom: 16px;
+            line-height: 1.7;
+        }
+        
+        /* GraphQL Query signature */
+        .query-block {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .mutation-block {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .subscription-block {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        /* Code blocks */
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin: 16px 0;
+            overflow: hidden;
+        }
+        
+        .code-header {
+            background: #f0f0f0;
+            padding: 10px 16px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        pre {
+            padding: 20px;
+            overflow-x: auto;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        code {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 13px;
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        
+        /* Entity Cards */
+        .entity-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .entity-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .entity-icon {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+        
+        .entity-desc {
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+            opacity: 0.95;
+        }
+        
+        .entity-properties {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+        }
+        
+        .entity-properties strong {
+            color: #fff;
+        }
+        
+        /* Concept cards */
+        .concept-card {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-left: 4px solid #0066ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 16px 0;
+        }
+        
+        .concept-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #0066ff;
+        }
+        
+        .concept-desc {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        /* Flow diagram */
+        .flow-diagram {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 12px;
+            padding: 32px;
+            margin: 32px 0;
+            text-align: center;
+            color: white;
+        }
+        
+        .flow-step {
+            display: inline-block;
+            padding: 12px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            margin: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .flow-arrow {
+            display: inline-block;
+            color: rgba(255, 255, 255, 0.8);
+            margin: 0 12px;
+            font-size: 16px;
+        }
+        
+        /* Alert blocks */
+        .alert {
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid;
+        }
+        
+        .alert-info {
+            background: #e3f2fd;
+            border-left-color: #2196f3;
+            color: #1565c0;
+        }
+        
+        .alert-warning {
+            background: #fff8e1;
+            border-left-color: #ffc107;
+            color: #f57c00;
+        }
+        
+        .alert-error {
+            background: #ffebee;
+            border-left-color: #f44336;
+            color: #c62828;
+        }
+        
+        .alert-success {
+            background: #e8f5e9;
+            border-left-color: #4caf50;
+            color: #2e7d32;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        th {
+            text-align: left;
+            padding: 16px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        td {
+            padding: 16px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        tr:last-child td {
+            border-bottom: none;
+        }
+        
+        /* Snapshots diagram */
+        .snapshots-diagram {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 12px;
+            padding: 32px;
+            margin: 32px 0;
+            color: white;
+        }
+        
+        .diagram-title {
+            font-size: 20px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        
+        .diagram-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 16px 0;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        
+        .diagram-box {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            backdrop-filter: blur(10px);
+            font-weight: 500;
+            min-width: 140px;
+            text-align: center;
+        }
+        
+        .diagram-arrow-down {
+            font-size: 24px;
+            margin: 8px 0;
+            text-align: center;
+        }
+        
+        /* Schema visualization */
+        .schema-visual {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+        }
+        
+        .schema-node {
+            background: white;
+            border: 2px solid #0066ff;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 12px;
+            display: inline-block;
+            min-width: 160px;
+            text-align: center;
+            font-weight: 500;
+            color: #0066ff;
+        }
+        
+        .schema-connection {
+            color: #666;
+            margin: 0 12px;
+            font-size: 14px;
+        }
+        
+        /* Lists */
+        ul, ol {
+            margin: 16px 0;
+            padding-left: 24px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+        
+        /* Navigation improvements */
+        .nav-section-title:before {
+            content: '';
+            width: 4px;
+            height: 4px;
+            background: #0066ff;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 1200px) {
+            .sidebar {
+                width: 280px;
+            }
+            
+            .main {
+                margin-left: 280px;
+            }
+            
+            .content {
+                padding: 32px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .main {
+                margin-left: 0;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .diagram-row {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1>BuddyBot API</h1>
+                <p>Версия 2.0</p>
+            </div>
+            
+            <div id="nav-section-main" class="nav-section">
+                <div class="nav-section-title">Введение</div>
+                <!-- Links will be generated here -->
+            </div>
+            
+            <div id="nav-section-user" class="nav-section">
+                <div class="nav-section-title">Пользователь</div>
+                <!-- Links will be generated here -->
+            </div>
+            
+            <div id="nav-section-buddy" class="nav-section">
+                <div class="nav-section-title">Бадди</div>
+                <!-- Links will be generated here -->
+            </div>
+            
+            <div id="nav-section-moderator" class="nav-section">
+                <div class="nav-section-title">Модератор</div>
+                <!-- Links will be generated here -->
+            </div>
+            
+            <div id="nav-section-data" class="nav-section">
+                <div class="nav-section-title">Структуры данных</div>
+                <!-- Links will be generated here -->
+            </div>
+        </nav>
+        
+        <!-- Main Content -->
+        <main class="main">
+            <div class="content">
+                <!-- Overview Section -->
+                <h2 id="overview">Обзор</h2>
+                <p>BuddyBot GraphQL API — это современный интерфейс для системы корпоративного онбординга, построенный на принципах GraphQL. API обеспечивает точный контроль над запрашиваемыми данными, устраняет проблемы over-fetching и under-fetching, характерные для REST API.</p>
+                
+                <div class="alert alert-info">
+                    <strong>GraphQL Endpoint:</strong> <code>http://localhost/graphql</code><br>
+                    <strong>Playground:</strong> <code>http://localhost/graphql-playground</code><br>
+                    <strong>Авторизация:</strong> Bearer JWT токены в заголовке Authorization
+                </div>
+                
+                <h3 id="graphql-benefits">Преимущества GraphQL в BuddyBot</h3>
+                
+                <div class="concept-card">
+                    <div class="concept-title">🎯 Точность данных</div>
+                    <div class="concept-desc">
+                        Клиент запрашивает только нужные поля, что критично для мобильных устройств и медленных соединений. Вместо 10 REST-запросов для получения полной информации о потоке можно сделать один GraphQL-запрос.
+                    </div>
+                </div>
+
+                <div class="concept-card">
+                    <div class="concept-title">🔄 Реального времени</div>
+                    <div class="concept-desc">
+                        Subscriptions позволяют отслеживать изменения прогресса в реальном времени. Наставники мгновенно видят активность подопечных, пользователи получают уведомления о разблокировке новых этапов.
+                    </div>
+                </div>
+
+                <div class="concept-card">
+                    <div class="concept-title">🧩 Типизация</div>
+                    <div class="concept-desc">
+                        Строгая типизация и интроспекция схемы обеспечивают надежность разработки. Автогенерация клиентского кода, валидация на этапе разработки, отличная поддержка IDE.
+                    </div>
+                </div>
+                
+                <!-- Core Concepts Section -->
+                <h2 id="core-concepts">Концепции системы</h2>
+                <p>BuddyBot построен на принципах изоляции данных, версионирования контента и гибкой компонентной архитектуры.</p>
+
+                <h3 id="snapshots-concept">Концепция снапшотов</h3>
+                
+                <div class="alert alert-success">
+                    <strong>Ключевая особенность:</strong> Пользователи никогда не взаимодействуют напрямую с оригинальными Flow, FlowStep или FlowStepComponent. Они всегда работают со снапшотами (Snapshots), созданными в момент назначения потока.
+                </div>
+
+                <div class="snapshots-diagram">
+                    <div class="diagram-title">Архитектура снапшотов</div>
+                    
+                    <div class="diagram-row">
+                        <div class="diagram-box">🏗️ Admin создает<br>Flow (оригинал)</div>
+                        <div class="diagram-box">👨‍🏫 Buddy назначает<br>поток User'у</div>
+                        <div class="diagram-box">📸 Система создает<br>FlowSnapshot</div>
+                    </div>
+                    
+                    <div class="diagram-arrow-down">⬇️</div>
+                    
+                    <div class="diagram-row">
+                        <div class="diagram-box">👤 User работает<br>только со Snapshot</div>
+                        <div class="diagram-box">🔒 Изоляция от<br>изменений оригинала</div>
+                        <div class="diagram-box">📊 Индивидуальный<br>прогресс</div>
+                    </div>
+                </div>
+
+                <h4>Зачем нужны снапшоты?</h4>
+
+                <div class="concept-card">
+                    <div class="concept-title">🛡️ Стабильность обучения</div>
+                    <div class="concept-desc">
+                        Когда администратор изменяет оригинальный Flow (добавляет вопросы в квиз, меняет задания), это не влияет на пользователей, которые уже проходят обучение. Они продолжают работать со своим снапшотом, созданным на момент назначения.
+                    </div>
+                </div>
+
+                <div class="concept-card">
+                    <div class="concept-title">🎯 Персонализация</div>
+                    <div class="concept-desc">
+                        Каждый пользователь может иметь индивидуальную конфигурацию одного и того же потока. Например, разные дедлайны, дополнительные материалы, измененные критерии завершения.
+                    </div>
+                </div>
+
+                <div class="concept-card">
+                    <div class="concept-title">📈 Аналитика и A/B тестирование</div>
+                    <div class="concept-desc">
+                        Снапшоты позволяют анализировать эффективность разных версий контента. Можно сравнивать результаты пользователей, проходивших разные версии одного потока.
+                    </div>
+                </div>
+
+                <h4>Механика работы снапшотов</h4>
+
+                <div class="flow-diagram">
+                    <span class="flow-step">FlowAssignment</span>
+                    <span class="flow-arrow">создает</span>
+                    <span class="flow-step">FlowSnapshot</span>
+                    <span class="flow-arrow">содержит</span>
+                    <span class="flow-step">FlowStepSnapshot[]</span>
+                    <span class="flow-arrow">содержит</span>
+                    <span class="flow-step">ComponentSnapshot[]</span>
+                </div>
+
+                <h3 id="component-architecture">Компонентная архитектура</h3>
+
+                <div class="concept-card">
+                    <div class="concept-title">🧩 Гибкость типов</div>
+                    <div class="concept-desc">
+                        Каждый компонент имеет тип (article, task, quiz, video) и версию схемы. Это позволяет развивать функциональность без breaking changes. Новый тип компонента добавляется простой регистрацией в системе.
+                    </div>
+                </div>
+
+                <div class="concept-card">
+                    <div class="concept-title">📋 Критерии завершения</div>
+                    <div class="concept-desc">
+                        Каждый тип компонента определяет свои критерии завершения:<br>
+                        • <strong>Article:</strong> факт прочтения<br>
+                        • <strong>Task:</strong> правильный ответ<br>
+                        • <strong>Quiz:</strong> ответы на все вопросы<br>
+                        • <strong>Video:</strong> просмотр до конца
+                    </div>
+                </div>
+
+                <h3 id="progress-system">Система прогресса</h3>
+
+                <div class="concept-card">
+                    <div class="concept-title">📊 Многоуровневое отслеживание</div>
+                    <div class="concept-desc">
+                        Прогресс отслеживается на 4 уровнях:<br>
+                        1. <strong>ComponentProgress</strong> — прогресс по конкретному компоненту<br>
+                        2. <strong>StepProgress</strong> — прогресс по этапу (агрегация компонентов)<br>
+                        3. <strong>FlowProgress</strong> — прогресс по потоку (агрегация этапов)<br>
+                        4. <strong>UserProgress</strong> — общий прогресс пользователя (агрегация потоков)
+                    </div>
+                </div>
+
+                <!-- Entities Section -->
+                <h2 id="entities">Сущности системы</h2>
+
+                <h3 id="entity-user">User (Пользователь)</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">👤</div>
+                        User — центральная сущность системы
+                    </div>
+                    <div class="entity-desc">
+                        Представляет сотрудника компании, проходящего обучение. Может иметь множественные роли и участвовать в нескольких потоках одновременно.
+                    </div>
+                    <div class="entity-properties">
+                        <strong>Основные характеристики:</strong><br>
+                        • Уникальная связь с Telegram аккаунтом<br>
+                        • Множественные роли (user, buddy, moderator)<br>
+                        • Принадлежность к отделу и позиции<br>
+                        • История активности и статистика обучения
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">GraphQL схема User</div>
+                    <pre>type User {
+  id: ID!
+  telegramId: String!
+  name: String!
+  telegramUsername: String
+  roles: [Role!]!
+  avatarUrl: String
+  isActive: Boolean!
+  
+  # Связи
+  assignedFlows: [FlowAssignment!]!
+  buddyAssignments: [FlowAssignment!]! # Потоки, где user — buddy
+  createdFlows: [Flow!]! # Потоки, созданные user'ом (если moderator)
+  
+  # Агрегированные данные
+  overallProgress: UserProgress!
+  
+  # Метаданные
+  createdAt: DateTime!
+  lastLoginAt: DateTime
+}</pre>
+                </div>
+
+                <h4>Взаимодействия User</h4>
+                <ul>
+                    <li><strong>Назначение потоков:</strong> User получает FlowAssignment от Buddy</li>
+                    <li><strong>Прохождение контента:</strong> User взаимодействует с ComponentSnapshot через мутации</li>
+                    <li><strong>Отслеживание прогресса:</strong> Система автоматически обновляет Progress на всех уровнях</li>
+                    <li><strong>Роль Buddy:</strong> User может назначать потоки другим пользователям</li>
+                    <li><strong>Роль Moderator:</strong> User может создавать и редактировать Flow</li>
+                </ul>
+
+                <h3 id="entity-flow">Flow (Поток обучения)</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">🌊</div>
+                        Flow — шаблон обучающей программы
+                    </div>
+                    <div class="entity-desc">
+                        Определяет структуру и содержание обучения. Это "чертеж", по которому создаются индивидуальные снапшоты для каждого пользователя. Flow редактируется администраторами и служит основой для создания FlowSnapshot.
+                    </div>
+                    <div class="entity-properties">
+                        <strong>Назначение:</strong><br>
+                        • Шаблон для создания снапшотов<br>
+                        • Определение последовательности этапов<br>
+                        • Настройка критериев и ограничений<br>
+                        • Базис для аналитики и отчетности
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">GraphQL схема Flow</div>
+                    <pre>type Flow {
+  id: ID!
+  title: String!
+  description: String!
+  
+  # Структура
+  steps: [FlowStep!]!
+  stepsCount: Int!
+  
+  # Настройки прохождения
+  settings: FlowSettings!
+  
+  # Настройки
+  isActive: Boolean!
+  defaultDeadlineDays: Int # Дедлайн по умолчанию
+  
+  # Связи
+  assignments: [FlowAssignment!]! # Все назначения этого потока
+  createdBy: User!
+  
+  # Аналитика
+  stats: FlowStats!
+  
+  # Метаданные  
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  version: String! # Версия для отслеживания изменений
+}
+
+type FlowSettings {
+  # Темп прохождения
+  stepsPerDay: Int! # Сколько этапов в день должен проходить пользователь
+  maxStepsPerDay: Int # Максимум этапов в день (если null, то без ограничений)
+  
+  # Дедлайны и временные рамки
+  startDeadlineDays: Int! # Через сколько дней после назначения нужно начать
+  allowWeekendWork: Boolean! # Разрешено ли работать в выходные
+  
+  # Уведомления
+  enableDailyReminders: Boolean! # Ежедневные напоминания
+  enableDeadlineWarnings: Boolean! # Предупреждения о дедлайнах
+  reminderTime: Time # Время отправки ежедневных напоминаний (HH:MM)
+  
+  # Гибкость
+  allowPause: Boolean! # Может ли пользователь ставить на паузу
+  autoResumeAfterDays: Int # Автовозобновление после N дней паузы
+}</pre>
+                </div>
+
+                <h4>Механика Flow</h4>
+                <div class="concept-card">
+                    <div class="concept-title">⚙️ Жизненный цикл</div>
+                    <div class="concept-desc">
+                        1. <strong>Создание:</strong> Admin создает Flow с этапами и компонентами<br>
+                        2. <strong>Активация:</strong> Flow становится доступным для назначения<br>
+                        3. <strong>Назначение:</strong> Buddy назначает Flow → создается FlowSnapshot<br>
+                        4. <strong>Изменение:</strong> Admin может изменять Flow без влияния на активные снапшоты<br>
+                        5. <strong>Архивирование:</strong> Flow помечается неактивным, новые назначения невозможны
+                    </div>
+                </div>
+
+                <h3 id="entity-flowsnapshot">FlowSnapshot (Снапшот потока)</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">📸</div>
+                        FlowSnapshot — индивидуальная копия потока
+                    </div>
+                    <div class="entity-desc">
+                        Неизменяемый снимок Flow, созданный в момент назначения пользователю. Это то, с чем реально взаимодействует пользователь. Гарантирует стабильность обучения независимо от изменений в оригинальном Flow.
+                    </div>
+                    <div class="entity-properties">
+                        <strong>Ключевые особенности:</strong><br>
+                        • Неизменяемость после создания<br>
+                        • Полная изоляция от оригинального Flow<br>
+                        • Индивидуальная конфигурация для каждого User<br>
+                        • Привязка к конкретному FlowAssignment
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">GraphQL схема FlowSnapshot</div>
+                    <pre>type FlowSnapshot {
+  id: ID!
+  
+  # Копия данных из оригинального Flow на момент создания
+  title: String!
+  description: String!
+  
+  # Ссылка на оригинал и версию
+  originalFlowId: ID!
+  snapshotVersion: DateTime! # Время создания снапшота
+  originalFlowVersion: String! # Версия оригинального Flow
+  
+  # Структура снапшота
+  steps: [FlowStepSnapshot!]!
+  stepsCount: Int!
+  
+  # Связи
+  assignment: FlowAssignment! # Родительское назначение
+  
+  # Метаданные
+  createdAt: DateTime!
+}</pre>
+                </div>
+
+                <div class="schema-visual">
+                    <div style="text-align: center; margin-bottom: 16px; font-weight: 600;">Связь Flow → FlowSnapshot</div>
+                    <div style="text-align: center;">
+                        <span class="schema-node">Flow (template)</span>
+                        <span class="schema-connection">копируется в</span>
+                        <span class="schema-node">FlowSnapshot</span>
+                        <span class="schema-connection">назначается</span>
+                        <span class="schema-node">User</span>
+                    </div>
+                </div>
+
+                <h3 id="entity-flowassignment">FlowAssignment (Назначение потока)</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">🎯</div>
+                        FlowAssignment — связка пользователя и потока
+                    </div>
+                    <div class="entity-desc">
+                        Центральная сущность, которая связывает пользователя с конкретным потоком обучения. При создании FlowAssignment автоматически генерируется FlowSnapshot и инициализируется система отслеживания прогресса.
+                    </div>
+                    <div class="entity-properties">
+                        <strong>Функции:</strong><br>
+                        • Управление доступом к потоку<br>
+                        • Контроль дедлайнов и статусов<br>
+                        • Связь с наставниками (Buddy)<br>
+                        • Агрегация прогресса и аналитики
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">GraphQL схема FlowAssignment</div>
+                    <pre>type FlowAssignment {
+  id: ID!
+  
+  # Основные связи
+  user: User! # Кому назначен поток
+  flowSnapshot: FlowSnapshot! # Снапшот потока
+  buddies: [User!]! # Наставники (до 5 человек)
+  primaryBuddy: User! # Основной наставник (первый в списке)
+  
+  # Статус и контроль
+  status: AssignmentStatus! # not_started, in_progress, paused, completed
+  deadline: DateTime!
+  isOverdue: Boolean!
+  
+  # Прогресс
+  progress: FlowProgress!
+  
+  # Управление
+  pausedAt: DateTime
+  pausedBy: User
+  pauseReason: String
+  
+  # Временные метки
+  assignedAt: DateTime!
+  startedAt: DateTime
+  completedAt: DateTime
+  
+  # Аналитика
+  timeSpent: Int! # В секундах
+  lastActivity: DateTime
+}
+
+enum AssignmentStatus {
+  NOT_STARTED
+  IN_PROGRESS  
+  PAUSED
+  COMPLETED
+  CANCELLED
+}</pre>
+                </div>
+
+                <h4>Жизненный цикл FlowAssignment</h4>
+                <div class="flow-diagram">
+                    <span class="flow-step">Создание</span>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-step">Начало</span>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-step">Прохождение</span>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-step">Завершение</span>
+                </div>
+
+                <h3 id="entity-progress">Progress (Система прогресса)</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">📊</div>
+                        Progress — многоуровневая система отслеживания
+                    </div>
+                    <div class="entity-desc">
+                        Иерархическая система отслеживания прогресса от отдельных компонентов до общих достижений пользователя. Автоматически агрегирует данные и предоставляет аналитику для наставников и администраторов.
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">GraphQL схемы Progress</div>
+                    <pre># Прогресс по компоненту
+type ComponentProgress {
+  id: ID!
+  componentSnapshotId: ID!
+  
+  status: ComponentStatus!
+  progressData: ComponentProgressData # Специфичные для типа компонента данные
+  
+  startedAt: DateTime
+  completedAt: DateTime
+  timeSpent: Int # В секундах
+}
+
+# Union для разных типов прогресса компонентов
+union ComponentProgressData = 
+  | ArticleProgressData 
+  | TaskProgressData 
+  | QuizProgressData
+
+type ArticleProgressData {
+  readingProgress: Float # 0-1, процент прочитанного
+}
+
+type TaskProgressData {
+  attempts: Int!
+  lastAnswer: String
+  isCorrect: Boolean
+}
+
+type QuizProgressData {
+  answers: [QuizAnswerData!]!
+  score: Float
+  correctAnswers: Int!
+  totalQuestions: Int!
+}
+
+type QuizAnswerData {
+  questionId: ID!
+  selectedOptionId: ID!
+  isCorrect: Boolean!
+  answeredAt: DateTime!
+}
+
+# Прогресс по этапу  
+type StepProgress {
+  id: ID!
+  stepSnapshotId: ID!
+  
+  status: StepStatus!
+  completedComponents: Int!
+  totalComponents: Int!
+  requiredComponents: Int!
+  
+  percentage: Float! # 0-100
+  
+  startedAt: DateTime
+  completedAt: DateTime
+  timeSpent: Int
+}
+
+# Прогресс по потоку
+type FlowProgress {
+  id: ID!
+  assignmentId: ID!
+  
+  status: FlowStatus!
+  currentStepOrder: Int!
+  completedSteps: Int!
+  totalSteps: Int!
+  
+  percentage: Float! # 0-100
+  
+  timeSpent: Int
+  lastActivity: DateTime
+}
+
+# Общий прогресс пользователя
+type UserProgress {
+  id: ID!
+  userId: ID!
+  
+  totalFlows: Int!
+  completedFlows: Int!
+  inProgressFlows: Int!
+  
+  averageProgress: Float!
+  totalTimeSpent: Int!
+  streakDays: Int! # Дни подряд с активностью
+  
+  achievements: [Achievement!]!
+}</pre>
+                </div>
+
+                <h3 id="entity-achievements">Achievement (Достижения)</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">🏆</div>
+                        Achievement — система мотивации и признания
+                    </div>
+                    <div class="entity-desc">
+                        Простая система достижений для мотивации пользователей. Достижения автоматически выдаются при выполнении определенных условий и отображаются в профиле пользователя.
+                    </div>
+                    <div class="entity-properties">
+                        <strong>Функции:</strong><br>
+                        • Мотивация к обучению<br>
+                        • Признание достижений<br>
+                        • Прогрессирование и цели<br>
+                        • Социальное взаимодействие
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">GraphQL схемы Achievement</div>
+                    <pre># Базовый тип достижения
+type Achievement {
+  id: ID!
+  key: String! # Уникальный ключ достижения (first_flow, speed_runner, etc.)
+  title: String!
+  description: String!
+  icon: String! # Emoji или URL иконки
+  rarity: AchievementRarity!
+  
+  # Условия получения (для отображения прогресса)
+  criteria: AchievementCriteria!
+  
+  createdAt: DateTime!
+}
+
+# Связь пользователя с достижением
+type UserAchievement {
+  id: ID!
+  user: User!
+  achievement: Achievement!
+  earnedAt: DateTime!
+  
+  # Контекст получения достижения
+  context: AchievementContext
+}
+
+# Критерии для получения достижения
+type AchievementCriteria {
+  type: AchievementType!
+  target: Int # Целевое значение (например, количество потоков)
+  condition: String # Описание условия
+}
+
+# Контекст получения (что именно привело к достижению)
+type AchievementContext {
+  flowId: ID
+  assignmentId: ID  
+  timeSpent: Int
+  additionalData: String # JSON строка с дополнительной информацией
+}
+
+enum AchievementRarity {
+  COMMON    # Обычные - легко получить
+  RARE      # Редкие - требуют усилий  
+  EPIC      # Эпические - сложные условия
+  LEGENDARY # Легендарные - очень редкие
+}
+
+enum AchievementType {
+  FLOW_COMPLETION     # Завершение потоков
+  SPEED_COMPLETION    # Быстрое прохождение
+  PERFECT_SCORE       # Идеальные результаты  
+  STREAK              # Активность подряд
+  MILESTONE           # Важные вехи
+  SPECIAL             # Специальные события
+}</pre>
+                </div>
+
+                <h4>Примеры достижений</h4>
+                <div class="concept-card">
+                    <div class="concept-title">🎯 Базовые достижения</div>
+                    <div class="concept-desc">
+                        <strong>Первые шаги:</strong><br>
+                        • "Первый поток" — завершить любой поток<br>
+                        • "Быстрый старт" — завершить первый этап за 30 минут<br>
+                        • "Отличник" — получить 100% в квизе<br><br>
+                        
+                        <strong>Прогресс:</strong><br>
+                        • "Марафонец" — завершить 5 потоков<br>
+                        • "Спринтер" — завершить поток за половину отведенного времени<br>
+                        • "Перфекционист" — завершить 3 потока с идеальными результатами<br><br>
+                        
+                        <strong>Активность:</strong><br>
+                        • "Постоянство" — активность 7 дней подряд<br>
+                        • "Ранняя пташка" — активность до 9 утра 5 дней подряд<br>
+                        • "Сова" — активность после 22:00 в течение недели
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Query: Достижения пользователя</div>
+                    <pre>query GetUserAchievements($userId: ID!) {
+  user(id: $userId) {
+    id
+    name
+    
+    # Полученные достижения
+    achievements {
+      id
+      achievement {
+        key
+        title
+        description
+        icon
+        rarity
+      }
+      earnedAt
+      context {
+        flowId
+        timeSpent
+      }
+    }
+    
+    # Статистика по достижениям
+    achievementStats {
+      total: Int!
+      byRarity {
+        common: Int!
+        rare: Int!
+        epic: Int!
+        legendary: Int!
+      }
+      recentAchievements(limit: 3) {
+        achievement {
+          title
+          icon
+        }
+        earnedAt
+      }
+    }
+  }
+}</pre>
+                </div>
+
+                <h3 id="entity-components">Components (Компоненты контента)</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">🧩</div>
+                        Components — атомарные единицы контента
+                    </div>
+                    <div class="entity-desc">
+                        Гибкая система типизированных компонентов, где каждый тип определяет свою схему данных, критерии завершения и механики взаимодействия. Поддерживает версионирование и легкое добавление новых типов.
+                    </div>
+                </div>
+
+                <h3 id="entity-system-settings">SystemSettings (Системные настройки)</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">⚙️</div>
+                        SystemSettings — глобальные настройки системы
+                    </div>
+                    <div class="entity-desc">
+                        Определяют глобальное поведение системы: рабочие дни, часы, праздники и другие общие параметры, влияющие на расчет дедлайнов и отправку уведомлений.
+                    </div>
+                    <div class="entity-properties">
+                        <strong>Назначение:</strong><br>
+                        • Определение рабочих дней и часов<br>
+                        • Управление праздниками и выходными<br>
+                        • Настройка часовых поясов<br>
+                        • Глобальные ограничения уведомлений
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">GraphQL схема SystemSettings</div>
+                    <pre>type SystemSettings {
+  id: ID!
+  
+  # Рабочее время
+  workingDays: [DayOfWeek!]! # Рабочие дни недели
+  workingHours: WorkingHours!
+  timezone: String! # Часовой пояс (например, "Europe/Moscow")
+  
+  # Праздники и особые дни
+  holidays: [Holiday!]! # Список праздничных дней
+  
+  # Уведомления
+  notificationSettings: NotificationSettings!
+  
+  # Метаданные
+  updatedAt: DateTime!
+  updatedBy: User!
+}
+
+type WorkingHours {
+  startTime: Time! # Начало рабочего дня (HH:MM)
+  endTime: Time! # Конец рабочего дня (HH:MM)
+  lunchBreak: LunchBreak
+}
+
+type LunchBreak {
+  startTime: Time!
+  endTime: Time!
+}
+
+type Holiday {
+  id: ID!
+  name: String!
+  date: Date!
+  isRecurring: Boolean! # Повторяется ли каждый год
+  isWorkingDay: Boolean! # Рабочий ли это день (сокращенный)
+}
+
+type NotificationSettings {
+  enabled: Boolean!
+  quietHours: QuietHours! # Когда не отправлять уведомления
+  maxNotificationsPerDay: Int! # Максимум уведомлений в день на пользователя
+}
+
+type QuietHours {
+  startTime: Time! # Например, 22:00
+  endTime: Time! # Например, 08:00
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+scalar Time # Формат HH:MM
+scalar Date # Формат YYYY-MM-DD</pre>
+                </div>
+
+                <h3 id="entity-deadline-system">Система дедлайнов</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">⏰</div>
+                        Умная система расчета дедлайнов
+                    </div>
+                    <div class="entity-desc">
+                        Автоматически рассчитывает и корректирует дедлайны с учетом рабочих дней, пауз, просрочек и настроек потока. Обеспечивает справедливое и гибкое планирование обучения.
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Логика расчета дедлайнов</div>
+                    <pre>type DeadlineCalculation {
+  assignmentId: ID!
+  
+  # Исходные данные
+  assignedAt: DateTime!
+  startDeadline: DateTime! # Когда нужно начать
+  targetCompletionDate: DateTime! # Когда нужно завершить
+  
+  # Текущее состояние
+  currentDeadline: DateTime! # Актуальный дедлайн с учетом пауз/просрочек
+  daysRemaining: Int! # Рабочих дней до дедлайна
+  isOverdue: Boolean!
+  
+  # История изменений
+  adjustments: [DeadlineAdjustment!]!
+  
+  # Прогноз
+  estimatedCompletionDate: DateTime # На основе текущего темпа
+  riskLevel: RiskLevel! # LOW, MEDIUM, HIGH
+}
+
+type DeadlineAdjustment {
+  id: ID!
+  type: AdjustmentType!
+  reason: String!
+  daysDelta: Int! # На сколько дней сдвинулся дедлайн
+  adjustedBy: User
+  createdAt: DateTime!
+}
+
+enum AdjustmentType {
+  PAUSE_STARTED     # Пользователь поставил на паузу
+  PAUSE_ENDED       # Пользователь снял с паузы
+  BUDDY_EXTENSION   # Buddy продлил дедлайн
+  SYSTEM_CORRECTION # Система скорректировала (праздники, etc.)
+  OVERDUE_PENALTY   # Штраф за просрочку
+}
+
+enum RiskLevel {
+  LOW     # Все идет по плану
+  MEDIUM  # Небольшое отставание  
+  HIGH    # Серьезный риск не успеть
+  CRITICAL # Дедлайн уже прошел
+}</pre>
+                </div>
+
+                <h4>Принципы расчета дедлайнов</h4>
+
+                <div class="concept-card">
+                    <div class="concept-title">📅 Базовый расчет</div>
+                    <div class="concept-desc">
+                        1. <strong>Начальный дедлайн:</strong> assignedAt + startDeadlineDays (только рабочие дни)<br>
+                        2. <strong>Финальный дедлайн:</strong> startDate + (stepsCount / stepsPerDay) рабочих дней<br>
+                        3. <strong>Учет выходных:</strong> автоматическое исключение нерабочих дней<br>
+                        4. <strong>Праздники:</strong> автоматический перенос дедлайнов на следующие рабочие дни
+                    </div>
+                </div>
+
+                <div class="concept-card">
+                    <div class="concept-title">⏸️ Влияние пауз</div>
+                    <div class="concept-desc">
+                        1. <strong>Пауза пользователя:</strong> дедлайн сдвигается на количество дней паузы<br>
+                        2. <strong>Пауза buddy:</strong> дедлайн замораживается до снятия паузы<br>
+                        3. <strong>Автовозобновление:</strong> если настроено, пауза снимается автоматически<br>
+                        4. <strong>Максимальная пауза:</strong> система может ограничивать длительность пауз
+                    </div>
+                </div>
+
+                <div class="concept-card">
+                    <div class="concept-title">⚠️ Обработка просрочек</div>
+                    <div class="concept-desc">
+                        1. <strong>Мягкая просрочка:</strong> 1-2 дня — напоминания, дедлайн не меняется<br>
+                        2. <strong>Средняя просрочка:</strong> 3-5 дней — уведомление buddy, возможна корректировка<br>
+                        3. <strong>Критическая просрочка:</strong> 5+ дней — эскалация, обязательное вмешательство buddy<br>
+                        4. <strong>Штрафные дни:</strong> за каждый день просрочки может добавляться штрафной день к дедлайну
+                    </div>
+                </div>
+
+                <h3 id="entity-notifications">Система уведомлений</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">🔔</div>
+                        Notifications — многоканальная система уведомлений
+                    </div>
+                    <div class="entity-desc">
+                        Уведомления доставляются двумя способами: через Telegram бота (с inline-кнопками для быстрых действий) и в интерфейсе мини-аппа. Система учитывает рабочее время, приоритеты и предпочтения пользователей.
+                    </div>
+                    <div class="entity-properties">
+                        <strong>Каналы доставки:</strong><br>
+                        • Telegram бот с inline-кнопками<br>
+                        • Интерфейс мини-аппа (real-time)<br>
+                        • Push-уведомления (опционально)<br>
+                        • Email (для критичных событий)
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">GraphQL схема Notifications</div>
+                    <pre>type Notification {
+  id: ID!
+  
+  # Основная информация
+  type: NotificationType!
+  priority: NotificationPriority!
+  title: String!
+  message: String!
+  
+  # Получатели
+  recipient: User!
+  sender: User # Кто инициировал уведомление (может быть система)
+  
+  # Контекст
+  context: NotificationContext!
+  
+  # Статус
+  status: NotificationStatus!
+  readAt: DateTime
+  
+  # Доставка
+  channels: [NotificationChannel!]!
+  telegramMessageId: String # ID сообщения в Telegram
+  
+  # Действия
+  actions: [NotificationAction!]! # Inline-кнопки и быстрые действия
+  
+  # Метаданные
+  createdAt: DateTime!
+  scheduledFor: DateTime # Когда отправить (если отложенное)
+  expiresAt: DateTime # Когда уведомление становится неактуальным
+}
+
+type NotificationContext {
+  assignmentId: ID
+  flowId: ID
+  stepId: ID
+  componentId: ID
+  achievementId: ID
+  
+  # Дополнительные данные для подстановки в шаблон
+  variables: NotificationVariables
+}
+
+type NotificationVariables {
+  userName: String
+  buddyName: String
+  flowName: String
+  stepName: String
+  deadline: DateTime
+  daysRemaining: Int
+  # ... другие переменные для шаблонов
+}
+
+type NotificationAction {
+  id: ID!
+  type: NotificationActionType!
+  label: String!
+  url: String # Deep link в мини-апп
+  payload: String # JSON с данными для обработки
+}
+
+enum NotificationType {
+  # Для пользователей
+  FLOW_ASSIGNED           # Назначен новый поток
+  STEP_UNLOCKED          # Разблокирован новый этап
+  DEADLINE_APPROACHING   # Приближается дедлайн
+  DEADLINE_OVERDUE       # Дедлайн просрочен
+  DAILY_REMINDER         # Ежедневное напоминание
+  ACHIEVEMENT_EARNED     # Получено достижение
+  FLOW_COMPLETED         # Поток завершен
+  
+  # Для buddy
+  USER_INACTIVE          # Подопечный неактивен
+  USER_STRUGGLING        # Подопечный испытывает трудности
+  USER_COMPLETED_STEP    # Подопечный завершил этап
+  USER_COMPLETED_FLOW    # Подопечный завершил поток
+  DEADLINE_ALERT         # Алерт по дедлайнам подопечных
+  
+  # Системные
+  SYSTEM_MAINTENANCE     # Техническое обслуживание
+  SYSTEM_UPDATE          # Обновление системы
+}
+
+enum NotificationPriority {
+  LOW      # Информационные сообщения
+  NORMAL   # Обычные уведомления
+  HIGH     # Важные события
+  URGENT   # Критичные ситуации
+}
+
+enum NotificationStatus {
+  SCHEDULED  # Запланировано к отправке
+  SENT       # Отправлено
+  DELIVERED  # Доставлено
+  READ       # Прочитано
+  FAILED     # Ошибка доставки
+  CANCELLED  # Отменено
+}
+
+enum NotificationChannel {
+  TELEGRAM   # Telegram бот
+  IN_APP     # В интерфейсе мини-аппа
+  PUSH       # Push-уведомления
+  EMAIL      # Email (для критичных)
+}
+
+enum NotificationActionType {
+  OPEN_FLOW       # Открыть поток
+  OPEN_STEP       # Открыть этап
+  OPEN_COMPONENT  # Открыть компонент
+  EXTEND_DEADLINE # Продлить дедлайн
+  PAUSE_FLOW      # Поставить на паузу
+  RESUME_FLOW     # Возобновить поток
+  CONTACT_BUDDY   # Связаться с buddy
+  VIEW_PROGRESS   # Посмотреть прогресс
+}</pre>
+                </div>
+
+                <h4>Примеры уведомлений</h4>
+
+                <div class="concept-card">
+                    <div class="concept-title">👤 Уведомления для пользователей</div>
+                    <div class="concept-desc">
+                        <strong>Назначение потока:</strong><br>
+                        "Бадди {buddyName} назначил вам поток «{flowName}». Начните проходить сегодня!"<br>
+                        🔘 Открыть поток | 📞 Связаться с бадди<br><br>
+                        
+                        <strong>Ежедневное напоминание:</strong><br>
+                        "Привет! Начни день с открытия нового этапа. Тебе открылся этап «{stepName}» в потоке «{flowName}». Пройди его в течение дня."<br>
+                        🚀 Начать этап | ⏸️ Поставить на паузу<br><br>
+                        
+                        <strong>Приближение дедлайна:</strong><br>
+                        "Внимание! До дедлайна потока «{flowName}» осталось {daysRemaining} дней. Не забудьте завершить обучение вовремя."<br>
+                        📖 Продолжить | 📅 Посмотреть прогресс
+                    </div>
+                </div>
+
+                <div class="concept-card">
+                    <div class="concept-title">👨‍🏫 Уведомления для buddy</div>
+                    <div class="concept-desc">
+                        <strong>Неактивность подопечного:</strong><br>
+                        "Подопечный {userName} не проходил новые этапы уже 3 дня. Возможно, стоит связаться с ним."<br>
+                        👁️ Посмотреть прогресс | 💬 Написать сообщение<br><br>
+                        
+                        <strong>Завершение этапа:</strong><br>
+                        "Отлично! {userName} завершил этап «{stepName}» в потоке «{flowName}». Прогресс: {progress}%"<br>
+                        📊 Подробный отчет | 🎉 Поздравить<br><br>
+                        
+                        <strong>Риск просрочки:</strong><br>
+                        "Внимание! У {userName} высокий риск не успеть завершить «{flowName}» в срок. Осталось {daysRemaining} дней."<br>
+                        📅 Продлить дедлайн | 💬 Обсудить с сотрудником
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Query: Получение уведомлений</div>
+                    <pre>query GetNotifications($userId: ID!, $limit: Int = 20, $unreadOnly: Boolean = false) {
+  user(id: $userId) {
+    notifications(
+      first: $limit
+      filter: { unreadOnly: $unreadOnly }
+      orderBy: { field: CREATED_AT, direction: DESC }
+    ) {
+      edges {
+        node {
+          id
+          type
+          priority
+          title
+          message
+          status
+          readAt
+          createdAt
+          context {
+            assignmentId
+            flowName
+            stepName
+            variables {
+              userName
+              buddyName
+              deadline
+              daysRemaining
+            }
+          }
+          actions {
+            type
+            label
+            url
+            payload
+          }
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}</pre>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Mutation: Отметить как прочитанное</div>
+                    <pre>mutation MarkNotificationAsRead($notificationId: ID!) {
+  markNotificationAsRead(id: $notificationId) {
+    notification {
+      id
+      status
+      readAt
+    }
+  }
+}
+
+# Или массово
+mutation MarkNotificationsAsRead($notificationIds: [ID!]!) {
+  markNotificationsAsRead(ids: $notificationIds) {
+    count
+    notifications {
+      id
+      status
+    }
+  }
+}</pre>
+                </div>
+
+                <h4>Telegram интеграция</h4>
+
+                <div class="concept-card">
+                    <div class="concept-title">🤖 Бот-интеграция</div>
+                    <div class="concept-desc">
+                        <strong>Inline-кнопки:</strong> Каждое Telegram уведомление содержит 1-3 кнопки для быстрых действий<br>
+                        <strong>Deep links:</strong> Кнопки ведут напрямую к нужному разделу мини-аппа<br>
+                        <strong>Персонализация:</strong> Сообщения адаптируются под роль и контекст пользователя<br>
+                        <strong>Умная доставка:</strong> Учет рабочего времени и предпочтений пользователя
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Пример Telegram сообщения (JSON)</div>
+                    <pre>{
+  "chat_id": 279058397,
+  "text": "🚀 Привет! Начни день с открытия нового этапа.\n\nТебе открылся этап «Знакомство с командой» в потоке «Онбординг в компанию». Пройди его в течение дня.",
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "text": "🚀 Начать этап",
+          "web_app": {
+            "url": "https://buddybot.app?start=assignment_101_step_2"
+          }
+        }
+      ],
+      [
+        {
+          "text": "📊 Посмотреть прогресс",
+          "web_app": {
+            "url": "https://buddybot.app?view=assignment_101_progress"
+          }
+        },
+        {
+          "text": "⏸️ Поставить на паузу",
+          "callback_data": "pause_assignment_101"
+        }
+      ]
+    ]
+  }
+}</pre>
+                </div>
+
+                <h4>Subscription для real-time уведомлений</h4>
+
+                <div class="subscription-block">
+                    subscription userNotifications($userId: ID!)
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Подписка на уведомления пользователя</div>
+                    <pre>subscription UserNotifications($userId: ID!) {
+  notificationReceived(userId: $userId) {
+    notification {
+      id
+      type
+      priority
+      title
+      message
+      context {
+        assignmentId
+        flowName
+        stepName
+      }
+      actions {
+        type
+        label
+        url
+      }
+      createdAt
+    }
+    
+    # Мета-информация для клиента
+    shouldShowToast: Boolean! # Показать всплывающее уведомление
+    shouldPlaySound: Boolean! # Воспроизвести звук
+    shouldUpdateBadge: Boolean! # Обновить счетчик непрочитанных
+  }
+}</pre>
+                </div>
+
+                <h3 id="entity-components-detail">Components (Компоненты контента)</h3>
+
+                <div class="entity-card">
+                    <div class="entity-title">
+                        <div class="entity-icon">🧩</div>
+                        Components — атомарные единицы контента
+                    </div>
+                    <div class="entity-desc">
+                        Гибкая система типизированных компонентов, где каждый тип определяет свою схему данных, критерии завершения и механики взаимодействия. Поддерживает версионирование и легкое добавление новых типов.
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Базовая схема Component</div>
+                    <pre>interface ComponentSnapshot {
+  id: ID!
+  type: String! # article, task, quiz, video, etc.
+  typeVersion: String! # v1.0.0, v1.1.0, etc.
+  order: Int!
+  isRequired: Boolean!
+  
+  # Прогресс пользователя
+  userProgress: ComponentProgress!
+  
+  # Связи
+  stepSnapshot: FlowStepSnapshot!
+  
+  createdAt: DateTime!
+}
+
+# Конкретные типы компонентов
+type ArticleComponent implements ComponentSnapshot {
+  # ... базовые поля из interface
+  id: ID!
+  type: String!
+  typeVersion: String!
+  order: Int!
+  isRequired: Boolean!
+  userProgress: ComponentProgress!
+  stepSnapshot: FlowStepSnapshot!
+  createdAt: DateTime!
+  
+  # Специфичные поля для статьи
+  title: String!
+  content: String! # Markdown
+  attachments: [Attachment!]!
+}
+
+type TaskComponent implements ComponentSnapshot {
+  # ... базовые поля из interface
+  id: ID!
+  type: String!
+  typeVersion: String!
+  order: Int!
+  isRequired: Boolean!
+  userProgress: ComponentProgress!
+  stepSnapshot: FlowStepSnapshot!
+  createdAt: DateTime!
+  
+  # Специфичные поля для задания
+  title: String!
+  description: String!
+  instruction: String!
+  codeWord: String!
+  hint: String
+  maxAttempts: Int
+}
+
+type QuizComponent implements ComponentSnapshot {
+  # ... базовые поля из interface
+  id: ID!
+  type: String!
+  typeVersion: String!
+  order: Int!
+  isRequired: Boolean!
+  userProgress: ComponentProgress!
+  stepSnapshot: FlowStepSnapshot!
+  createdAt: DateTime!
+  
+  # Специфичные поля для квиза
+  title: String!
+  questions: [QuizQuestion!]!
+}
+
+type Attachment {
+  id: ID!
+  filename: String!
+  url: String!
+  mimeType: String!
+  size: Int!
+}</pre>
+                </div>
+
+                <!-- GraphQL API Section -->
+                <h2 id="schema-overview">GraphQL Schema</h2>
+
+                <div class="alert alert-info">
+                    <strong>Endpoint:</strong> <code>/graphql</code><br>
+                    <strong>Introspection:</strong> включена в development, отключена в production<br>
+                    <strong>Playground:</strong> доступен по адресу <code>/graphql-playground</code>
+                </div>
+
+                <h3 id="queries">Queries</h3>
+
+                <h4>Получение потоков пользователя</h4>
+                <div class="query-block">
+                    query getUserFlows($userId: ID!)
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Query: Список потоков пользователя</div>
+                    <pre>query GetUserFlows($userId: ID!) {
+  user(id: $userId) {
+    id
+    name
+    assignedFlows {
+      id
+      status
+      deadline
+      isOverdue
+      progress {
+        percentage
+        currentStepOrder
+        totalSteps
+        timeSpent
+      }
+      flowSnapshot {
+        title
+        description
+        estimatedHours
+      }
+      buddy {
+        id
+        name
+        telegramUsername
+      }
+      lastActivity
+    }
+  }
+}</pre>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Response</div>
+                    <pre>{
+  "data": {
+    "user": {
+      "id": "1",
+      "name": "Иван Иванов",
+      "assignedFlows": [
+        {
+          "id": "101",
+          "status": "IN_PROGRESS",
+          "deadline": "2024-02-01T23:59:59Z",
+          "isOverdue": false,
+          "progress": {
+            "percentage": 65.0,
+            "currentStepOrder": 3,
+            "totalSteps": 5,
+            "timeSpent": 7200
+          },
+          "flowSnapshot": {
+            "title": "Онбординг в компанию",
+            "description": "Базовый курс для новых сотрудников",
+            "estimatedHours": 8.0
+          },
+          "buddy": {
+            "id": "10",
+            "name": "Петр Петров",
+            "telegramUsername": "petrov"
+          },
+          "lastActivity": "2024-01-20T14:30:00Z"
+        }
+      ]
+    }
+  }
+}</pre>
+                </div>
+
+                <h4>Детальная информация о потоке</h4>
+                <div class="query-block">
+                    query getFlowDetails($assignmentId: ID!)
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Query: Подробности потока с компонентами</div>
+                    <pre>query GetFlowDetails($assignmentId: ID!) {
+  flowAssignment(id: $assignmentId) {
+    id
+    status
+    progress {
+      percentage
+      currentStepOrder
+      lastActivity
+    }
+    flowSnapshot {
+      title
+      description
+      steps {
+        id
+        title
+        description
+        order
+        userProgress {
+          status
+          percentage
+          completedComponents
+          totalComponents
+        }
+        components {
+          id
+          type
+          typeVersion
+          order
+          isRequired
+          userProgress {
+            status
+            completedAt
+            timeSpent
+            data
+          }
+          
+          # Полиморфные поля в зависимости от типа
+          ... on ArticleComponent {
+            title
+            content
+            readingTime
+          }
+          
+          ... on TaskComponent {
+            title
+            description
+            instruction
+            hint
+            maxAttempts
+          }
+          
+          ... on QuizComponent {
+            title
+            passingScore
+            questions {
+              id
+              text
+              options {
+                id
+                text
+                # isCorrect и explanation скрыты до ответа
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}</pre>
+                </div>
+
+                <h3 id="mutations">Mutations</h3>
+
+                <h4>Взаимодействие с компонентами</h4>
+                <div class="mutation-block">
+                    mutation interactWithComponent($input: ComponentInteractionInput!)
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Универсальная мутация для взаимодействия с компонентами</div>
+                    <pre>mutation InteractWithComponent($input: ComponentInteractionInput!) {
+  interactWithComponent(input: $input) {
+    success
+    message
+    
+    # Обновленный прогресс
+    componentProgress {
+      status
+      data
+      completedAt
+    }
+    
+    # Возможные следующие действия
+    nextActions
+    
+    # Разблокированные элементы
+    unlockedSteps {
+      id
+      title
+    }
+    
+    # Ошибки валидации
+    errors {
+      field
+      message
+    }
+  }
+}
+
+input ComponentInteractionInput {
+  assignmentId: ID!
+  componentId: ID!
+  action: ComponentAction!
+  
+  # Типизированные данные для разных действий
+  answerData: TaskAnswerInput
+  quizAnswerData: QuizAnswerInput
+  readingData: ReadingProgressInput
+  videoData: VideoProgressInput
+}
+
+input TaskAnswerInput {
+  answer: String!
+}
+
+input QuizAnswerInput {
+  questionId: ID!
+  optionId: ID!
+}
+
+input ReadingProgressInput {
+  timeSpent: Int # В секундах
+  scrollProgress: Float # 0-1, насколько прокрутили
+}
+
+input VideoProgressInput {
+  currentTime: Int # Текущая позиция в секундах
+  duration: Int # Общая длительность
+}
+
+enum ComponentAction {
+  START_READING        # Начать чтение статьи
+  FINISH_READING       # Завершить чтение статьи
+  SUBMIT_ANSWER        # Отправить ответ на задание
+  SUBMIT_QUIZ_ANSWER   # Отправить ответ на вопрос квиза
+  START_VIDEO          # Начать просмотр видео
+  UPDATE_VIDEO_PROGRESS # Обновить прогресс видео
+  FINISH_VIDEO         # Завершить просмотр видео
+}</pre>
+                </div>
+
+                <h4>Примеры взаимодействий</h4>
+
+                <div class="code-block">
+                    <div class="code-header">Пример: Отправка ответа на задание</div>
+                    <pre>          # Variables
+{
+  "input": {
+    "assignmentId": "101",
+    "componentId": "comp_1_2",
+    "action": "SUBMIT_ANSWER",
+    "answerData": {
+      "answer": "инновации"
+    }
+  }
+}
+
+# Response
+{
+  "data": {
+    "interactWithComponent": {
+      "success": true,
+      "message": "Отлично! Правильный ответ.",
+      "componentProgress": {
+        "status": "COMPLETED",
+        "progressData": {
+          "attempts": 2,
+          "lastAnswer": "инновации",
+          "isCorrect": true
+        },
+        "completedAt": "2024-01-20T15:30:00Z"
+      },
+      "nextActions": [],
+      "unlockedSteps": [
+        {
+          "id": "step_2",
+          "title": "Рабочие процессы"
+        }
+      ],
+      "errors": []
+    }
+  }
+}</pre>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Пример: Ответ на вопрос квиза</div>
+                    <pre># Variables
+{
+  "input": {
+    "assignmentId": "101", 
+    "componentId": "comp_1_3",
+    "action": "SUBMIT_QUIZ_ANSWER",
+    "quizAnswerData": {
+      "questionId": "q1",
+      "optionId": "opt_1_2"
+    }
+  }
+}
+
+# Response
+{
+  "data": {
+    "interactWithComponent": {
+      "success": true,
+      "message": "Верно! Это основная ценность компании.",
+      "componentProgress": {
+        "status": "IN_PROGRESS", # Пока не все вопросы отвечены
+        "progressData": {
+          "answers": [
+            {
+              "questionId": "q1",
+              "selectedOptionId": "opt_1_2", 
+              "isCorrect": true,
+              "answeredAt": "2024-01-20T16:00:00Z"
+            }
+          ],
+          "score": null, # Будет вычислен когда все вопросы отвечены
+          "correctAnswers": 1,
+          "totalQuestions": 3
+        },
+        "completedAt": null
+      },
+      "nextActions": ["SUBMIT_QUIZ_ANSWER"], # Можно отвечать на следующий вопрос
+      "unlockedSteps": [],
+      "errors": []
+    }
+  }
+}</pre>
+                </div>
+
+                <h4>Управление потоками (для Buddy)</h4>
+                <div class="mutation-block">
+                    mutation assignFlow($input: AssignFlowInput!)
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Назначение потока пользователю</div>
+                    <pre>mutation AssignFlow($input: AssignFlowInput!) {
+  assignFlow(input: $input) {
+    assignment {
+      id
+      user {
+        id
+        name
+      }
+      flowSnapshot {
+        title
+        stepsCount
+      }
+      deadline
+      status
+    }
+    
+    # Информация о созданном снапшоте
+    snapshotInfo {
+      originalFlowVersion
+      createdAt
+      componentsCount
+    }
+  }
+}
+
+input AssignFlowInput {
+  userId: ID!
+  flowId: ID!
+  deadline: DateTime
+  additionalBuddies: [ID!]
+  customization: FlowCustomizationInput
+}
+
+input FlowCustomizationInput {
+  # Возможность кастомизировать снапшот при назначении
+  modifiedSteps: [StepCustomizationInput!]
+  additionalInstructions: String
+}</pre>
+                </div>
+
+                <h3 id="subscriptions">Subscriptions</h3>
+
+                <div class="subscription-block">
+                    subscription progressUpdates($userId: ID!)
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Подписка на обновления прогресса</div>
+                    <pre>subscription ProgressUpdates($userId: ID!) {
+  progressUpdated(userId: $userId) {
+    type # COMPONENT_COMPLETED, STEP_UNLOCKED, FLOW_COMPLETED
+    assignmentId
+    stepId
+    componentId
+    
+    # Новые данные прогресса
+    componentProgress {
+      status
+      data
+      completedAt
+    }
+    
+    stepProgress {
+      status
+      percentage
+      completedComponents
+    }
+    
+    flowProgress {
+      percentage
+      currentStepOrder
+      lastActivity
+    }
+    
+    # Системные события
+    achievements {
+      id
+      title
+      earnedAt
+    }
+    
+    unlockedContent {
+      stepIds
+      componentIds
+    }
+    
+    timestamp
+  }
+}</pre>
+                </div>
+
+                <div class="subscription-block">
+                    subscription buddyNotifications($buddyId: ID!)
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Подписка на уведомления для наставников</div>
+                    <pre>subscription BuddyNotifications($buddyId: ID!) {
+  buddyNotification(buddyId: $buddyId) {
+    type # USER_COMPLETED_STEP, USER_AT_RISK, DEADLINE_APPROACHING
+    
+    user {
+      id
+      name
+    }
+    
+    assignment {
+      id
+      flowSnapshot {
+        title
+      }
+      deadline
+      progress {
+        percentage
+      }
+    }
+    
+    # Специфичная информация по типу уведомления
+    details {
+      stepCompleted {
+        stepTitle
+        timeSpent
+        difficulty
+      }
+      
+      riskFactors {
+        type # DEADLINE_OVERDUE, LOW_ACTIVITY, MULTIPLE_FAILED_ATTEMPTS
+        severity # LOW, MEDIUM, HIGH
+        description
+      }
+    }
+    
+    # Рекомендуемые действия
+    recommendedActions
+    
+    timestamp
+  }
+}</pre>
+                </div>
+
+                <!-- Roles Section -->
+                <h2 id="roles">Система ролей</h2>
+
+                <div class="concept-card">
+                    <div class="concept-title">🔐 Многоуровневая система доступа</div>
+                    <div class="concept-desc">
+                        Пользователи могут иметь множественные роли одновременно. Доступ к операциям проверяется на уровне резолверов GraphQL с учетом контекста (например, Buddy может управлять только своими подопечными).
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Enum ролей</div>
+                    <pre>enum Role {
+  USER        # Базовая роль - может проходить назначенные потоки
+  BUDDY       # Наставник - может назначать потоки и контролировать подопечных  
+  ADMIN       # Администратор - может создавать потоки и управлять системой
+}</pre>
+                </div>
+
+                <h3 id="user-functions">Функции пользователя (USER)</h3>
+
+                <div class="concept-card">
+                    <div class="concept-title">📚 Обучение</div>
+                    <div class="concept-desc">
+                        <strong>Доступные queries:</strong><br>
+                        • Просмотр назначенных потоков<br>
+                        • Получение контента этапов и компонентов<br>
+                        • Отслеживание собственного прогресса<br>
+                        • Просмотр достижений и статистики<br><br>
+                        
+                        <strong>Доступные mutations:</strong><br>
+                        • Взаимодействие с компонентами (чтение, ответы, прохождение)<br>
+                        • Обновление профиля<br><br>
+                        
+                        <strong>Доступные subscriptions:</strong><br>
+                        • Обновления собственного прогресса<br>
+                        • Уведомления о разблокировке контента
+                    </div>
+                </div>
+
+                <h3 id="buddy-functions">Функции наставника (BUDDY)</h3>
+
+                <div class="concept-card">
+                    <div class="concept-title">👨‍🏫 Наставничество</div>
+                    <div class="concept-desc">
+                        <strong>Дополнительные queries:</strong><br>
+                        • Список доступных потоков для назначения<br>
+                        • Прогресс подопечных с детальной аналитикой<br>
+                        • Статистика по назначенным потокам<br>
+                        • Пользователи "в зоне риска"<br><br>
+                        
+                        <strong>Дополнительные mutations:</strong><br>
+                        • Назначение потоков пользователям<br>
+                        • Приостановка/возобновление обучения<br>
+                        • Продление дедлайнов<br>
+                        • Добавление заметок к прогрессу<br><br>
+                        
+                        <strong>Дополнительные subscriptions:</strong><br>
+                        • Активность подопечных в реальном времени<br>
+                        • Уведомления о завершении этапов<br>
+                        • Алерты о проблемах с прохождением
+                    </div>
+                </div>
+
+                <h3 id="admin-functions">Функции администратора (ADMIN)</h3>
+
+                <div class="concept-card">
+                    <div class="concept-title">⚙️ Администрирование</div>
+                    <div class="concept-desc">
+                        <strong>Дополнительные queries:</strong><br>
+                        • Все пользователи системы<br>
+                        • Все потоки и их версии<br>
+                        • Системная аналитика и отчеты<br>
+                        • Логи активности<br><br>
+                        
+                        <strong>Дополнительные mutations:</strong><br>
+                        • Создание и редактирование потоков<br>
+                        • Управление ролями пользователей<br>
+                        • Массовые операции (импорт, экспорт)<br>
+                        • Архивирование и восстановление данных<br><br>
+                        
+                        <strong>Дополнительные subscriptions:</strong><br>
+                        • Системные события<br>
+                        • Изменения в потоках<br>
+                        • Регистрации новых пользователей
+                    </div>
+                </div>
+
+                <!-- Examples Section -->
+                <h2 id="examples-basic">Примеры использования</h2>
+
+                <h3>Базовый сценарий: Прохождение потока</h3>
+
+                <div class="code-block">
+                    <div class="code-header">1. Получение списка потоков</div>
+                    <pre>query MyFlows {
+  me {
+    assignedFlows(status: IN_PROGRESS) {
+      id
+      flowSnapshot {
+        title
+        steps {
+          id
+          title
+          order
+          userProgress {
+            status
+          }
+        }
+      }
+      progress {
+        currentStepOrder
+        percentage
+      }
+    }
+  }
+}</pre>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">2. Загрузка текущего этапа</div>
+                    <pre>query CurrentStep($assignmentId: ID!, $stepOrder: Int!) {
+  flowAssignment(id: $assignmentId) {
+    flowSnapshot {
+      steps(order: $stepOrder) {
+        id
+        title
+        description
+        components {
+          id
+          type
+          order
+          isRequired
+          userProgress {
+            status
+          }
+          
+          ... on ArticleComponent {
+            title
+            content
+            readingTime
+          }
+          
+          ... on TaskComponent {
+            title
+            description
+            instruction
+            hint
+          }
+        }
+      }
+    }
+  }
+}</pre>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">3. Прочтение статьи</div>
+                    <pre>mutation StartReading($assignmentId: ID!, $componentId: ID!) {
+  interactWithComponent(input: {
+    assignmentId: $assignmentId
+    componentId: $componentId
+    action: START_READING
+  }) {
+    success
+    componentProgress {
+      status
+      progressData {
+        ... on ArticleProgressData {
+          readingProgress
+        }
+      }
+    }
+  }
+}
+
+# Затем завершение чтения
+mutation FinishReading($assignmentId: ID!, $componentId: ID!) {
+  interactWithComponent(input: {
+    assignmentId: $assignmentId
+    componentId: $componentId  
+    action: FINISH_READING
+    readingData: {
+      timeSpent: 420 # 7 минут в секундах
+      scrollProgress: 1.0 # Прочитано полностью
+    }
+  }) {
+    success
+    message
+    unlockedSteps {
+      id
+      title
+    }
+  }
+}</pre>
+                </div>
+
+                <h3 id="examples-complex">Сложные сценарии</h3>
+
+                <div class="code-block">
+                    <div class="code-header">Массовое назначение потоков</div>
+                    <pre>mutation BulkAssignFlow($flowId: ID!, $users: [BulkAssignmentInput!]!) {
+  bulkAssignFlow(input: {
+    flowId: $flowId
+    assignments: $users
+  }) {
+    successful {
+      assignment {
+        id
+        user {
+          name
+        }
+      }
+    }
+    failed {
+      userId
+      reason
+    }
+    summary {
+      total
+      successful
+      failed
+    }
+  }
+}
+
+input BulkAssignmentInput {
+  userId: ID!
+  deadline: DateTime
+  buddyId: ID
+  customization: FlowCustomizationInput
+}</pre>
+                </div>
+
+                <h3 id="examples-realtime">Real-time обновления</h3>
+
+                <div class="code-block">
+                    <div class="code-header">React Hook для отслеживания прогресса</div>
+                    <pre>// Пример использования subscription в React
+function useProgressTracking(userId) {
+  const { data, loading } = useSubscription(PROGRESS_UPDATES, {
+    variables: { userId }
+  });
+  
+  const [progress, setProgress] = useState({});
+  const [notifications, setNotifications] = useState([]);
+  
+  useEffect(() => {
+    if (data?.progressUpdated) {
+      const update = data.progressUpdated;
+      
+      // Обновляем прогресс
+      setProgress(prev => ({
+        ...prev,
+        [update.assignmentId]: {
+          ...prev[update.assignmentId],
+          ...update.flowProgress
+        }
+      }));
+      
+      // Показываем уведомления о достижениях
+      if (update.achievements?.length > 0) {
+        setNotifications(prev => [
+          ...prev,
+          ...update.achievements.map(achievement => ({
+            type: 'achievement',
+            title: achievement.title,
+            timestamp: update.timestamp
+          }))
+        ]);
+      }
+      
+      // Уведомления о разблокировке
+      if (update.unlockedContent?.stepIds?.length > 0) {
+        setNotifications(prev => [
+          ...prev,
+          {
+            type: 'unlock',
+            title: 'Новый этап разблокирован!',
+            timestamp: update.timestamp
+          }
+        ]);
+      }
+    }
+  }, [data]);
+  
+  return { progress, notifications, loading };
+}</pre>
+                </div>
+
+                <!-- Technical Section -->
+                <h2 id="error-handling">Обработка ошибок</h2>
+
+                <div class="concept-card">
+                    <div class="concept-title">🚨 Стратегия обработки ошибок</div>
+                    <div class="concept-desc">
+                        GraphQL возвращает ошибки в стандартном формате с дополнительными полями для классификации и обработки на клиенте.
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Структура ошибки GraphQL</div>
+                    <pre>{
+  "errors": [
+    {
+      "message": "Недостаточно прав для выполнения операции",
+      "locations": [{ "line": 3, "column": 5 }],
+      "path": ["assignFlow"],
+      "extensions": {
+        "code": "FORBIDDEN",
+        "category": "AUTHORIZATION",
+        "details": {
+          "requiredRole": "BUDDY",
+          "userRoles": ["USER"]
+        },
+        "timestamp": "2024-01-20T15:30:00Z"
+      }
+    }
+  ],
+  "data": {
+    "assignFlow": null
+  }
+}</pre>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Коды ошибок</div>
+                    <pre>enum ErrorCode {
+  # Авторизация
+  UNAUTHORIZED          # Требуется авторизация
+  FORBIDDEN            # Недостаточно прав
+  TOKEN_EXPIRED        # Токен истек
+  
+  # Валидация
+  VALIDATION_ERROR     # Ошибка валидации входных данных
+  INVALID_INPUT        # Некорректный формат данных
+  REQUIRED_FIELD       # Обязательное поле не заполнено
+  
+  # Бизнес-логика
+  FLOW_ALREADY_ASSIGNED    # Поток уже назначен пользователю
+  COMPONENT_LOCKED         # Компонент заблокирован
+  STEP_NOT_AVAILABLE       # Этап недоступен
+  DEADLINE_PASSED          # Дедлайн прошел
+  MAX_ATTEMPTS_EXCEEDED    # Превышено количество попыток
+  
+  # Система
+  INTERNAL_ERROR       # Внутренняя ошибка сервера
+  SERVICE_UNAVAILABLE  # Сервис недоступен
+  RATE_LIMIT_EXCEEDED  # Превышен лимит запросов
+}</pre>
+                </div>
+
+                <h3 id="performance">Производительность</h3>
+
+                <div class="concept-card">
+                    <div class="concept-title">⚡ Оптимизации</div>
+                    <div class="concept-desc">
+                        <strong>DataLoader:</strong> Батчинг и кеширование запросов к БД<br>
+                        <strong>Query complexity:</strong> Ограничение сложности запросов<br>
+                        <strong>Depth limiting:</strong> Максимальная глубина вложенности<br>
+                        <strong>Caching:</strong> Redis для кеширования частых запросов<br>
+                        <strong>Pagination:</strong> Cursor-based пагинация для больших списков
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Пример пагинации</div>
+                    <pre>type Query {
+  flows(
+    first: Int
+    after: String
+    filter: FlowFilterInput
+    orderBy: FlowOrderByInput
+  ): FlowConnection!
+}
+
+type FlowConnection {
+  edges: [FlowEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type FlowEdge {
+  node: Flow!
+  cursor: String!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}</pre>
+                </div>
+
+                <h3 id="best-practices">Лучшие практики</h3>
+
+                <div class="concept-card">
+                    <div class="concept-title">📋 Рекомендации по использованию</div>
+                    <div class="concept-desc">
+                        <strong>1. Используйте фрагменты:</strong> Избегайте дублирования полей в запросах<br>
+                        <strong>2. Запрашивайте только нужные поля:</strong> GraphQL позволяет точно контролировать данные<br>
+                        <strong>3. Используйте variables:</strong> Никогда не включайте динамические значения в строку запроса<br>
+                        <strong>4. Обрабатывайте ошибки:</strong> Проверяйте поле errors в каждом ответе<br>
+                        <strong>5. Кешируйте на клиенте:</strong> Apollo Client или Relay для intelligent caching
+                    </div>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">Пример использования фрагментов</div>
+                    <pre>fragment UserInfo on User {
+  id
+  name
+  telegramUsername
+  avatarUrl
+}
+
+fragment ProgressInfo on FlowProgress {
+  percentage
+  currentStepOrder
+  totalSteps
+  timeSpent
+  lastActivity
+}
+
+query UserDashboard($userId: ID!) {
+  user(id: $userId) {
+    ...UserInfo
+    assignedFlows {
+      id
+      status
+      deadline
+      progress {
+        ...ProgressInfo
+      }
+      flowSnapshot {
+        title
+        description
+      }
+    }
+  }
+}</pre>
+                </div>
+
+                <div class="alert alert-success">
+                    <strong>🎉 Готово!</strong> Теперь у вас есть полное понимание GraphQL API BuddyBot. Система построена с учетом современных практик разработки и обеспечивает гибкость, производительность и удобство использования для всех типов клиентов.
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Smooth scroll and active link highlighting
+        function initializeNav() {
+            const navItems = document.querySelectorAll('.nav-item');
+            const sections = document.querySelectorAll('h2[id], h3[id]');
+            
+            function updateActiveNav() {
+                const scrollPos = window.scrollY + 100;
+                
+                sections.forEach(section => {
+                    const top = section.offsetTop;
+                    const id = section.getAttribute('id');
+                    
+                    if (scrollPos >= top) {
+                        navItems.forEach(item => {
+                            item.classList.remove('active');
+                            if (item.getAttribute('href') === '#' + id) {
+                                item.classList.add('active');
+                            }
+                        });
+                    }
+                });
+            }
+            
+            window.addEventListener('scroll', updateActiveNav);
+            
+            navItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href').substring(1);
+                    const targetSection = document.getElementById(targetId);
+                    if (targetSection) {
+                        targetSection.scrollIntoView({ behavior: 'smooth' });
+                    }
+                });
+            });
+
+            updateActiveNav();
+        }
+    </script>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const contentEl = document.querySelector('.content');
+        const sidebarHeader = document.querySelector('.sidebar-header');
+
+        if (!sidebarHeader || !contentEl) {
+            console.error('Необходимые элементы для редактора не найдены.');
+            return;
+        }
+
+        // --- Dynamic Sidebar Generation ---
+        function generateSidebar() {
+            const sectionsMap = {
+                main: document.getElementById('nav-section-main'),
+                user: document.getElementById('nav-section-user'),
+                buddy: document.getElementById('nav-section-buddy'),
+                moderator: document.getElementById('nav-section-moderator'),
+                data: document.getElementById('nav-section-data'),
+            };
+
+            const allHeaders = contentEl.querySelectorAll('h2[id]');
+
+            allHeaders.forEach(h2 => {
+                const id = h2.id;
+                const title = h2.textContent;
+
+                let targetSection;
+                if (id.startsWith('user-')) targetSection = sectionsMap.user;
+                else if (id.startsWith('buddy-')) targetSection = sectionsMap.buddy;
+                else if (id.startsWith('admin-')) targetSection = sectionsMap.moderator;
+                else if (['models', 'responses', 'errors'].includes(id)) targetSection = sectionsMap.data;
+                else targetSection = sectionsMap.main;
+                
+                if (targetSection) {
+                    const navItem = document.createElement('a');
+                    navItem.href = '#' + id;
+                    navItem.className = 'nav-item';
+                    navItem.textContent = title;
+                    targetSection.appendChild(navItem);
+                }
+            });
+
+            // Make the first item active by default
+            const firstNavItem = document.querySelector('.nav-item');
+            if(firstNavItem) {
+                firstNavItem.classList.add('active');
+            }
+        }
+        
+        generateSidebar();
+        initializeNav(); // Initialize navigation logic after sidebar is built
+
+        // --- Editor Buttons and Logic ---
+        const editBtn = document.createElement('button');
+        editBtn.textContent = 'Редактировать';
+        Object.assign(editBtn.style, {
+            marginTop: '1rem', padding: '8px 12px', cursor: 'pointer', width: '100%',
+            backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px'
+        });
+
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Сохранить';
+        Object.assign(saveBtn.style, {
+            marginTop: '0.5rem', padding: '8px 12px', cursor: 'pointer', width: '100%',
+            backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px', display: 'none'
+        });
+
+        const mdBtn = document.createElement('button');
+        mdBtn.textContent = 'Скачать MD';
+        Object.assign(mdBtn.style, {
+            marginTop: '0.5rem', padding: '8px 12px', cursor: 'pointer', width: '100%',
+            backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px'
+        });
+        
+        sidebarHeader.appendChild(editBtn);
+        sidebarHeader.appendChild(saveBtn);
+        sidebarHeader.appendChild(mdBtn);
+
+        let isEditing = false;
+        
+        editBtn.addEventListener('click', () => {
+            isEditing = !isEditing;
+            contentEl.contentEditable = isEditing;
+            editBtn.textContent = isEditing ? 'Отменить' : 'Редактировать';
+            editBtn.style.backgroundColor = isEditing ? '#dc3545' : '#007bff';
+            saveBtn.style.display = isEditing ? 'block' : 'none';
+            mdBtn.style.display = isEditing ? 'none' : 'block';
+            if (isEditing) {
+                contentEl.style.boxShadow = '0 0 0 2px #007bff';
+            } else {
+                location.reload();
+            }
+        });
+
+        saveBtn.addEventListener('click', () => {
+            const cleanHtml = contentEl.innerHTML;
+            
+            // Temporarily remove editor-specific elements and attributes for saving
+            const tempContainer = document.createElement('div');
+            tempContainer.innerHTML = document.documentElement.innerHTML;
+            
+            tempContainer.querySelector('#edit-doc-btn')?.remove();
+            tempContainer.querySelector('#save-doc-btn')?.remove();
+            tempContainer.querySelector('#md-doc-btn')?.remove();
+
+            const contentToSave = tempContainer.querySelector('.content');
+            if (contentToSave) {
+                contentToSave.removeAttribute('contenteditable');
+                contentToSave.style.boxShadow = '';
+            }
+
+            const fullHtml = `<!DOCTYPE html>\n<html lang="ru">\n${tempContainer.innerHTML}\n</html>`;
+
+            fetch('/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ html: fullHtml }),
+            })
+            .then(res => res.ok ? res.json() : Promise.reject('Ошибка сохранения'))
+            .then(data => {
+                alert(data.message);
+                location.reload();
+            })
+            .catch(err => {
+                console.error('Save failed:', err);
+                alert('Не удалось сохранить изменения.');
+            });
+        });
+
+        mdBtn.addEventListener('click', () => {
+            const contentToConvert = contentEl.innerHTML;
+            fetch('/generate-md', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ html: contentToConvert }),
+            })
+            .then(res => res.ok ? res.json() : Promise.reject('Ошибка генерации MD'))
+            .then(data => alert(data.message))
+            .catch(err => {
+                console.error('MD generation failed:', err);
+                alert('Не удалось сгенерировать MD файл.');
+            });
+        });
+    });
+    </script>
+</body>
+</html>

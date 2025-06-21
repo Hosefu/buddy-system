@@ -1,2 +1,0 @@
-# buddy-system
-

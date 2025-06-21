@@ -1,0 +1,397 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// #############################################################################
+// #  1. ОСНОВНЫЕ СУЩНОСТИ
+// #############################################################################
+
+// Модель Пользователя
+// Центральная сущность, представляющая сотрудника.
+model User {
+  id               String    @id @default(cuid())
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  telegramId       String    @unique
+  telegramUsername String?
+  name             String
+  avatarUrl        String?
+  isActive         Boolean   @default(true)
+  lastLoginAt      DateTime?
+
+  roles Role[] @default([USER])
+
+  // Связи
+  createdFlows         Flow[]              @relation("FlowCreator")
+  assignedFlowsAsUser  FlowAssignment[]    @relation("UserAssignments")
+  assignedFlowsAsBuddy FlowAssignment[]    @relation("BuddyAssignments")
+  notifications        Notification[]      @relation("UserNotifications")
+  userAchievements     UserAchievement[]
+  createdNotifications Notification[]      @relation("SenderNotifications")
+  pausedAssignments    FlowAssignment[]    @relation("PausedByAssignments")
+  updatedSettings      SystemSettings[]
+  userProgress         UserProgress?
+}
+
+// Модель Потока Обучения (Шаблон)
+// Представляет собой "чертеж" или шаблон курса.
+model Flow {
+  id                  String    @id @default(cuid())
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  version             String // Версия для отслеживания изменений
+  title               String
+  description         String
+  isActive            Boolean   @default(true)
+  defaultDeadlineDays Int? // Дедлайн по умолчанию в днях
+  stepsCount          Int       @default(0)
+
+  // Связи
+  creatorId String
+  creator   User   @relation("FlowCreator", fields: [creatorId], references: [id])
+  steps     FlowStep[]
+  snapshots FlowSnapshot[]
+}
+
+// Модель Шага в Потоке (Шаблон)
+model FlowStep {
+  id          String   @id @default(cuid())
+  order       Int
+  title       String
+  description String
+  templateComponents  Json[]
+  componentsCount     Int      @default(0)
+
+  // Связи
+  flowId      String
+  flow        Flow         @relation(fields: [flowId], references: [id])
+  components  FlowComponent[]
+
+
+  @@unique([flowId, order])
+}
+
+// Модель Компонента в Потоке (Шаблон)
+// Атомарная единица контента в рамках шага.
+model FlowComponent {
+  id           String        @id @default(cuid())
+  order        Int
+  isRequired   Boolean       @default(true)
+  type         String // e.g., 'article', 'quiz', 'task'
+  typeVersion  String        @default("1.0.0")
+  data         Json // Содержимое компонента (вопросы, текст, и т.д.)
+
+  // Связи
+  stepId       String
+  step         FlowStep      @relation(fields: [stepId], references: [id])
+
+  @@unique([stepId, order])
+}
+
+// #############################################################################
+// #  2. СНАПШОТЫ (НЕИЗМЕНЯЕМЫЕ КОПИИ)
+// #############################################################################
+
+// Снапшот Потока
+// Неизменяемая копия Flow в момент назначения.
+model FlowSnapshot {
+  id                  String    @id @default(cuid())
+  createdAt           DateTime  @default(now())
+  title               String
+  description         String
+  snapshotVersion     DateTime  @default(now())
+  originalFlowVersion String
+
+  // Связи
+  originalFlowId String
+  originalFlow   Flow           @relation(fields: [originalFlowId], references: [id])
+  assignmentId   String?        @unique
+  assignment     FlowAssignment? @relation(fields: [assignmentId], references: [id])
+  steps          FlowStepSnapshot[]
+}
+
+// Снапшот Шага
+model FlowStepSnapshot {
+  id          String @id @default(cuid())
+  order       Int
+  title       String
+  description String
+
+  // Связи
+  snapshotId String
+  snapshot   FlowSnapshot       @relation(fields: [snapshotId], references: [id])
+  components ComponentSnapshot[]
+  progress   StepProgress[]
+
+  @@unique([snapshotId, order])
+}
+
+// Снапшот Компонента
+// То, с чем реально взаимодействует пользователь.
+model ComponentSnapshot {
+  id          String @id @default(cuid())
+  order       Int
+  isRequired  Boolean
+  type        String
+  typeVersion String
+  data        Json
+
+  // Связи
+  stepId      String
+  step        FlowStepSnapshot @relation(fields: [stepId], references: [id])
+  progress    ComponentProgress[]
+
+  @@unique([stepId, order])
+}
+
+// #############################################################################
+// #  3. НАЗНАЧЕНИЯ И ПРОГРЕСС
+// #############################################################################
+
+// Модель Назначения Потока
+// Связывает пользователя, снапшот потока и наставников.
+model FlowAssignment {
+  id            String           @id @default(cuid())
+  assignedAt    DateTime         @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  deadline      DateTime
+  status        AssignmentStatus @default(NOT_STARTED)
+  isOverdue     Boolean          @default(false)
+  pauseReason   String?
+  pausedAt      DateTime?
+  timeSpent     Int              @default(0) // В секундах
+  lastActivity  DateTime?
+
+  // Связи
+  userId        String
+  user          User   @relation("UserAssignments", fields: [userId], references: [id])
+  snapshot      FlowSnapshot?
+  buddies       User[] @relation("BuddyAssignments")
+  pausedById    String?
+  pausedBy      User?  @relation("PausedByAssignments", fields: [pausedById], references: [id])
+  flowProgress  FlowProgress?
+}
+
+// Общий прогресс пользователя
+model UserProgress {
+  id              String   @id @default(cuid())
+  totalTimeSpent  Int      @default(0)
+  streakDays      Int      @default(0)
+
+  // Связи
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+}
+
+// Прогресс по Потоку
+model FlowProgress {
+  id           String       @id @default(cuid())
+  assignmentId String       @unique
+  assignment   FlowAssignment @relation(fields: [assignmentId], references: [id])
+  status       FlowStatus   @default(NOT_STARTED)
+  percentage   Float        @default(0)
+  lastActivity DateTime?
+  
+  stepsProgress StepProgress[]
+}
+
+// Прогресс по Шагу
+model StepProgress {
+  id               String       @id @default(cuid())
+  stepSnapshotId   String
+  stepSnapshot     FlowStepSnapshot @relation(fields: [stepSnapshotId], references: [id])
+  status           StepStatus   @default(LOCKED)
+  percentage       Float        @default(0)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  timeSpent        Int          @default(0)
+
+  // Связи
+  flowProgressId   String
+  flowProgress     FlowProgress     @relation(fields: [flowProgressId], references: [id])
+  componentProgress ComponentProgress[]
+
+  @@unique([flowProgressId, stepSnapshotId])
+}
+
+// Прогресс по Компоненту
+model ComponentProgress {
+  id                  String          @id @default(cuid())
+  componentSnapshotId String
+  componentSnapshot   ComponentSnapshot @relation(fields: [componentSnapshotId], references: [id])
+  status              ComponentStatus @default(LOCKED)
+  startedAt           DateTime?
+  completedAt         DateTime?
+  timeSpent           Int             @default(0)
+  progressData        Json? // Специфичные для типа компонента данные
+
+  // Связи
+  stepProgressId      String
+  stepProgress        StepProgress    @relation(fields: [stepProgressId], references: [id])
+
+  @@unique([stepProgressId, componentSnapshotId])
+}
+
+// #############################################################################
+// #  4. УВЕДОМЛЕНИЯ И ДОСТИЖЕНИЯ
+// #############################################################################
+
+// Модель Уведомления
+model Notification {
+  id                String               @id @default(cuid())
+  createdAt         DateTime             @default(now())
+  type              String
+  title             String
+  message           String
+  priority          NotificationPriority @default(NORMAL)
+  status            NotificationStatus   @default(SCHEDULED)
+  readAt            DateTime?
+  scheduledFor      DateTime?
+  expiresAt         DateTime?
+  context           Json? // Контекст: assignmentId, flowId, и т.д.
+  actions           Json? // Действия: inline-кнопки
+
+  // Связи
+  recipientId       String
+  recipient         User   @relation("UserNotifications", fields: [recipientId], references: [id])
+  senderId          String?
+  sender            User?  @relation("SenderNotifications", fields: [senderId], references: [id])
+}
+
+// Модель Достижения (Шаблон)
+model Achievement {
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  key              String   @unique
+  title            String
+  description      String
+  icon             String
+  rarity           AchievementRarity @default(COMMON)
+  criteria         Json // Условия получения
+
+  // Связи
+  userAchievements UserAchievement[]
+}
+
+// Связующая модель для достижений пользователей
+model UserAchievement {
+  id            String      @id @default(cuid())
+  earnedAt      DateTime    @default(now())
+  context       Json?
+
+  // Связи
+  userId        String
+  achievementId String
+  user          User        @relation(fields: [userId], references: [id])
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])
+}
+
+// #############################################################################
+// #  5. СИСТЕМНЫЕ НАСТРОЙКИ
+// #############################################################################
+
+model SystemSettings {
+  id                   String    @id @default(cuid())
+  updatedAt            DateTime  @updatedAt
+  workingDays          DayOfWeek[]
+  workingHoursStart    String // HH:MM
+  workingHoursEnd      String // HH:MM
+  timezone             String
+  
+  // Связи
+  updatedById          String
+  updatedBy            User      @relation(fields: [updatedById], references: [id])
+}
+
+model Holiday {
+  id           String  @id @default(cuid())
+  name         String
+  date         DateTime @db.Date
+  isRecurring  Boolean @default(false)
+}
+
+// #############################################################################
+// #  ENUMS
+// #############################################################################
+
+enum Role {
+  USER
+  BUDDY
+  ADMIN
+}
+
+enum AssignmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum FlowStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum StepStatus {
+  LOCKED
+  UNLOCKED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum ComponentStatus {
+  LOCKED
+  UNLOCKED
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum NotificationStatus {
+  SCHEDULED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  CANCELLED
+}
+
+enum AchievementRarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+} 

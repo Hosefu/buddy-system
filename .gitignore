@@ -134,3 +134,10 @@ dist
 
 # Mac
 .DS_Store
+
+*.turbo
+.turbo
+
+.cursor
+
+.cursorignore
